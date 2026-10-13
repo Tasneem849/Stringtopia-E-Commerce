@@ -1,6 +1,6 @@
 # Stringtopia API
 
-Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admin roles), product catalog with search/filter/pagination, Paymob checkout (cards and mobile wallets, EGP) with callback-confirmed orders, and atomic stock updates.
+Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admin roles, email/password and Google sign-in), product catalog with search/filter/pagination, Paymob checkout (cards and mobile wallets, EGP) with callback-confirmed orders, and atomic stock updates.
 
 ## Run
 1. `npm install`
@@ -9,7 +9,7 @@ Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admi
 4. Payments locally: Paymob must reach your API, so expose it with a tunnel (e.g. `ngrok http 5000`) and set `API_URL` to that https address
 
 ## Endpoints
-- `POST /api/auth/register | login`, `GET /api/auth/me`
+- `POST /api/auth/register | login | google`, `GET /api/auth/me`
 - `GET /api/products` (`q, category, min, max, sort, page, limit`), `GET /api/products/:slug`
 - `POST/PUT/DELETE /api/products` (admin)
 - `POST /api/orders/checkout` (guests welcome), `GET /api/orders/by-ref/:token`, `POST /api/orders/pay/:token`, `GET /api/orders/mine`

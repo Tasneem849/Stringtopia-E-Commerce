@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useStore } from '@/components/Providers';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
 
 export default function Login() {
   const { login } = useStore();
@@ -30,7 +31,8 @@ export default function Login() {
       <input type="password" placeholder="Password (8+ characters)" value={f.password} onChange={set('password')} className={input} />
       {err && <p className="text-red-700">{err}</p>}
       <button className="btn btn-primary w-full">{mode === 'login' ? 'Log in' : 'Sign up'}</button>
-      <button type="button" className="text-sm underline" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+      <GoogleSignInButton />
+      <button type="button" className="cursor-pointer text-sm underline hover:text-blue-700" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
         {mode === 'login' ? 'New here? Create an account' : 'Have an account? Log in'}
       </button>
     </form>

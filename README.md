@@ -4,7 +4,7 @@ A full-stack online shop for handmade crochet, built for the Egyptian market (EG
 
 ## What it does
 - Catalog with search, category filters, sorting and pagination; product pages with photo galleries (server-rendered for SEO)
-- Guest checkout for in-stock items; accounts are optional
+- Guest checkout for in-stock items; accounts are optional, with email/password or Google sign-in
 - **Reservations:** when stock can't cover an order, customers request it; the seller approves or declines, then the customer pays
 - Delivery to yourself, delivery as a gift (with a card message), or free pickup
 - Paymob payments (cards and mobile wallets), email notifications, Cloudinary photo uploads

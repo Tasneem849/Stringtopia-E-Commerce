@@ -114,3 +114,79 @@
   *, ::before, ::after { animation: none !important; transition: none !important; }
   .btn:hover, .card-lift:hover, .pill:hover, .hero-art:hover { transform: none; }
 }
+
+@layer components {
+  .catalog-search {
+    position: relative; display: block;
+    margin-bottom: 1.25rem; padding: .75rem;
+    border: 2px dashed color-mix(in oklab, var(--color-ink) 28%, transparent); border-radius: 1.5rem;
+    background: linear-gradient(115deg, color-mix(in oklab, var(--color-pink) 18%, white), white 48%, color-mix(in oklab, var(--color-sky) 60%, white));
+    box-shadow: 5px 6px 0 var(--color-sun);
+  }
+  .catalog-search::after {
+    content: '✦'; position: absolute; top: -.95rem; right: 1.25rem;
+    color: var(--color-grape); font-size: 1.4rem; line-height: 1;
+    pointer-events: none; animation: search-sparkle 2.2s ease-in-out infinite;
+  }
+  .catalog-search-main { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; }
+  .catalog-search-field {
+    display: flex; flex: 1 1 18rem; min-width: 0; align-items: center; gap: .7rem;
+    padding: 0 .95rem; border: 2px solid color-mix(in oklab, var(--color-ink) 18%, transparent);
+    border-radius: 999px; background: white; transition: border-color .15s, box-shadow .15s;
+  }
+  .catalog-search-field:focus-within {
+    border-color: var(--color-grape);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-grape) 20%, transparent);
+  }
+  .catalog-search-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; color: var(--color-berry); }
+  .catalog-search-input {
+    width: 100%; min-width: 0; flex: 1; padding: .7rem 0; border: 0;
+    outline: none; background: transparent; color: var(--color-ink); font: inherit;
+  }
+  .catalog-search-input::placeholder { color: color-mix(in oklab, var(--color-ink) 58%, white); }
+  .catalog-search-hint {
+    flex: 0 0 auto; padding: .25rem .55rem; border-radius: 999px; background: var(--color-sun);
+    font-size: .68rem; font-weight: 800; transform: rotate(2deg);
+  }
+  .catalog-sort { flex: 0 1 auto; }
+  .catalog-sort-select { min-width: 10.5rem; border-radius: 999px; }
+  .catalog-search-button { display: inline-flex; min-height: 2.7rem; align-items: center; justify-content: center; gap: .45rem; }
+  .catalog-search-button span { color: var(--color-sun); font-size: 1.2rem; line-height: 1; }
+  .catalog-search-button:hover span { color: var(--color-ink); }
+  .catalog-search-filters {
+    display: grid; grid-template-columns: repeat(2, minmax(7rem, 10rem)) auto minmax(6rem, 1fr); align-items: end; gap: .7rem;
+    margin-top: .8rem; padding-top: .8rem; border-top: 1px dashed color-mix(in oklab, var(--color-ink) 22%, transparent);
+  }
+  .catalog-price-filter { display: grid; gap: .3rem; color: color-mix(in oklab, var(--color-ink) 78%, white); font-size: .78rem; font-weight: 750; }
+  .catalog-currency { color: color-mix(in oklab, var(--color-ink) 55%, white); font-size: .7rem; font-weight: 600; }
+  .catalog-price-input { width: 100%; min-width: 0; border-radius: .8rem; }
+  .catalog-stock-filter {
+    display: flex; min-height: 2.65rem; align-items: center; gap: .5rem; padding: 0 .7rem;
+    border-radius: 999px; background: color-mix(in oklab, var(--color-grass) 22%, white); font-size: .82rem; font-weight: 700; cursor: pointer;
+  }
+  .catalog-stock-filter input { width: 1rem; height: 1rem; accent-color: var(--color-grass); }
+  .catalog-clear-filters { justify-self: end; padding: .45rem .2rem; color: var(--color-grape); font-size: .8rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .catalog-clear-filters:hover { color: var(--color-berry); }
+}
+
+@keyframes search-sparkle {
+  0%, 100% { transform: rotate(12deg) scale(.95); }
+  50% { transform: rotate(-8deg) scale(1.18); }
+}
+
+@media (max-width: 640px) {
+  .catalog-search { gap: .6rem; padding: .65rem; }
+  .catalog-search-main { gap: .6rem; }
+  .catalog-search-main .catalog-search-field { flex-basis: 100%; }
+  .catalog-search-hint { display: none; }
+  .catalog-search-main .catalog-sort, .catalog-search-main .catalog-search-button { flex: 1 1 8rem; }
+  .catalog-sort-select { width: 100%; min-width: 0; }
+  .catalog-search-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }
+  .catalog-stock-filter { grid-column: 1 / 2; border-radius: .8rem; }
+  .catalog-clear-filters { grid-column: 2 / 3; justify-self: end; }
+}
+
+@media (max-width: 360px) {
+  .catalog-search-filters { grid-template-columns: 1fr; }
+  .catalog-stock-filter, .catalog-clear-filters { grid-column: auto; justify-self: start; }
+}

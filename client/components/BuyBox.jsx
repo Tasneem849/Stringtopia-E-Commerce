@@ -45,7 +45,7 @@ export default function BuyBox({ product: p }) {
         onChange={(e) => setQty(Math.max(1, Math.min(20, +e.target.value || 1)))}
       />
       {qty <= p.stock ? (
-        <button onClick={() => { addToCart(p, qty); setMsg('Added to cart'); }} className="btn btn-primary">
+        <button onClick={() => { addToCart(p, qty); setMsg('Added to cart'); }} className="btn btn-primary ml-3">
           Add to cart
         </button>
       ) : (
@@ -70,7 +70,7 @@ export default function BuyBox({ product: p }) {
                 type="password" required minLength={8} placeholder="Password (8+ characters)"
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'} {...field('password')} className={input}
               />
-              <button type="button" className="underline" onClick={() => setMode(mode === 'register' ? 'login' : 'register')}>
+              <button type="button" className="cursor-pointer underline" onClick={() => setMode(mode === 'register' ? 'login' : 'register')}>
                 {mode === 'register' ? 'Already have an account? Log in' : 'New here? Create an account'}
               </button>
             </>

@@ -14,15 +14,22 @@ const productSchema = z.object({
   stock: z.number().int().min(0).optional(),
 });
 
-// GET /api/products?q=&category=&min=&max=&sort=price|-price|-createdAt&page=&limit=
+const escapeRegExp = (value) =>
+  [...value].map((character) => '.^$*+?()[]{}|\\'.includes(character) ? `\\${character}` : character).join('');
+
+// GET /api/products?q=&category=&min=&max=&inStock=true&sort=price|-price|-createdAt&page=&limit=
 router.get('/', async (req, res) => {
-  const { q, category, min, max, sort } = req.query;
+  const { q, category, min, max, inStock, sort } = req.query;
   const limit = Math.min(+req.query.limit || 12, 50);
   const page = Math.max(+req.query.page || 1, 1);
   const filter = {};
   if (q) filter.$text = { $search: String(q) };
-  if (category) filter.category = String(category);
+  const normalizedCategory = String(category ?? '').trim();
+  if (normalizedCategory) {
+    filter.category = { $regex: `^${escapeRegExp(normalizedCategory)}$`, $options: 'i' };
+  }
   if (min || max) filter.price = { ...(min && { $gte: +min }), ...(max && { $lte: +max }) };
+  if (String(inStock).toLowerCase() === 'true') filter.stock = { $gt: 0 };
   const sortBy = ['price', '-price', '-createdAt'].includes(sort) ? sort : '-createdAt';
 
   const [products, total] = await Promise.all([

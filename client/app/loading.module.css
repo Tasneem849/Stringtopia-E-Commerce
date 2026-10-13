@@ -1,0 +1,180 @@
+.screen {
+  --loader-cream: #fff8ee;
+  --loader-pink: #f3b9c0;
+  --loader-sage: #a7b88e;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  min-height: 100svh;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: clamp(1rem, 4vw, 2rem);
+  color: var(--color-ink, #121411);
+  background-color: var(--loader-cream);
+  background-image: radial-gradient(rgba(205, 34, 33, 0.09) 1px, transparent 1.35px);
+  background-size: 22px 22px;
+}
+
+.card {
+  flex: 0 0 auto;
+  width: min(100%, 34rem);
+  box-sizing: border-box;
+  padding: clamp(1.6rem, 5vw, 3rem) clamp(1.2rem, 5vw, 3rem) 2rem;
+  border: 2px dashed rgba(18, 20, 17, 0.2);
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 7px 9px 0 #eadbc9;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0 0 0.15rem;
+  color: #75885f;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.brand {
+  margin: 0;
+  color: var(--color-ink, #121411);
+  font-family: var(--font-display), cursive;
+  font-size: clamp(3.2rem, 11vw, 4.7rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+}
+
+.scene {
+  display: block;
+  width: min(100%, 19rem);
+  height: auto;
+  margin: 0.4rem auto 0.1rem;
+  overflow: visible;
+}
+
+.flower {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: flower-bob 2.4s ease-in-out infinite;
+}
+
+.yarn {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: yarn-roll 4.8s ease-in-out infinite;
+}
+
+.thread {
+  stroke-dasharray: 5 7;
+  animation: thread-stitch 3.2s linear infinite;
+}
+
+.hook {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: hook-sway 3.4s ease-in-out infinite;
+}
+
+.heart {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: heart-twinkle 2.8s ease-in-out infinite;
+}
+
+.heartTwo {
+  animation-delay: 0.7s;
+}
+
+.heartThree {
+  animation-delay: 1.25s;
+}
+
+.message {
+  margin: 0.45rem 0 0;
+  color: var(--color-ink, #121411);
+  font-size: clamp(0.98rem, 3.5vw, 1.12rem);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.loadingIndicator {
+  display: flex;
+  justify-content: center;
+  gap: 0.42rem;
+  margin-top: 0.8rem;
+}
+
+.loadingIndicator span {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--color-berry, #cd2221);
+  animation: stitch-pulse 1s ease-in-out infinite;
+}
+
+.loadingIndicator span:nth-child(2) {
+  background: var(--loader-sage);
+  animation-delay: 0.16s;
+}
+
+.loadingIndicator span:nth-child(3) {
+  background: var(--loader-pink);
+  animation-delay: 0.32s;
+}
+
+@keyframes flower-bob {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  45% { transform: translateY(-8px) rotate(2deg); }
+  70% { transform: translateY(0) rotate(0); }
+}
+
+@keyframes yarn-roll {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  50% { transform: rotate(8deg) translateY(-2px); }
+}
+
+@keyframes thread-stitch {
+  to { stroke-dashoffset: -48; }
+}
+
+@keyframes hook-sway {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(2deg); }
+}
+
+@keyframes heart-twinkle {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes stitch-pulse {
+  0%, 100% { opacity: 0.45; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+@media (max-width: 420px) {
+  .card {
+    border-radius: 1.6rem;
+    padding-inline: 1rem;
+  }
+
+  .scene {
+    width: min(100%, 16.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flower,
+  .yarn,
+  .thread,
+  .hook,
+  .heart,
+  .loadingIndicator span {
+    animation: none !important;
+  }
+}
