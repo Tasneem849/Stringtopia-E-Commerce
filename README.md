@@ -1,10 +1,6 @@
 # Stringtopia
 
-![CI](https://github.com/YOUR-NAME/stringtopia/actions/workflows/ci.yml/badge.svg)
-
 A full-stack online shop for handmade crochet, built for the Egyptian market (EGP, Paymob, pickup or delivery).
-
-**Live demo:** _add your Vercel link here_
 
 ## What it does
 - Catalog with search, category filters, sorting and pagination; product pages with photo galleries (server-rendered for SEO)
