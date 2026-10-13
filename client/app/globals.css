@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@theme static {
+  --color-ink: #121411;   /* pen black from the logo lettering */
+  --color-sky: #b9fcec;   /* the logo's aqua sky */
+  --color-milk: #ecfffa;  /* page background: a paler sky */
+  --color-berry: #cd2221; /* the bear's scarf: primary buttons */
+  --color-sun: #fcd432;   /* the crown: hover and highlights */
+  --color-grass: #8eb936; /* the hill: approve */
+  --color-grape: #1f1fd6; /* the blue yarn: focus and secondary hover */
+  --color-mint: #b9fcec;  /* alias used by older class names */
+  --color-yarn: #cd2221;  /* alias used by existing pages */
+  /* light yarn tones that hovers cycle through; dark text stays readable on all of them */
+  --color-pink: #ff8fcf; --color-blue: #6cc8ff; --color-lime: #b9f04a;
+  --color-orange: #ffae57; --color-lilac: #caa6ff; --color-butter: #ffe45c;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body), system-ui, sans-serif;
+    color: var(--color-ink);
+    background-color: var(--color-milk);
+    /* faint cross-stitch grid */
+    background-image: radial-gradient(color-mix(in oklab, var(--color-ink) 10%, transparent) 1.2px, transparent 1.4px);
+    background-size: 20px 20px;
+  }
+  h1, h2, h3 { font-family: var(--font-display), var(--font-body), sans-serif; }
+  input[type='radio'] { accent-color: var(--color-berry); }
+  :focus-visible { outline: 3px solid var(--color-grape); outline-offset: 2px; }
+}
+
+/* Children of .yarn-cycle each get a different yarn color to light up on hover, like a pile of skeins */
+.yarn-cycle > :nth-child(6n+1) { --pop: var(--color-pink); }
+.yarn-cycle > :nth-child(6n+2) { --pop: var(--color-blue); }
+.yarn-cycle > :nth-child(6n+3) { --pop: var(--color-lime); }
+.yarn-cycle > :nth-child(6n+4) { --pop: var(--color-orange); }
+.yarn-cycle > :nth-child(6n+5) { --pop: var(--color-lilac); }
+.yarn-cycle > :nth-child(6n+6) { --pop: var(--color-butter); }
+
+@layer components {
+  /* Buttons change color and tilt on hover, squish when pressed */
+  .btn {
+    display: inline-block; cursor: pointer; border: 2px solid transparent; border-radius: 999px;
+    padding: .55rem 1.25rem; font-weight: 700; line-height: 1.2; text-align: center;
+    transition: background-color .18s, color .18s, border-color .18s, transform .18s;
+  }
+  .btn:hover { transform: translateY(-2px) rotate(-1.5deg); }
+  .btn:active { transform: scale(.94); }
+  .btn-primary { background: var(--color-berry); color: #fff; }
+  .btn-primary:hover { background: var(--color-sun); color: var(--color-ink); }
+  .btn-ghost { border-color: var(--color-ink); color: var(--color-ink); }
+  .btn-ghost:hover { background: var(--color-sky); }
+  .btn-mint { background: var(--color-grass); color: var(--color-ink); }
+  .btn-mint:hover { background: var(--color-grape); color: #fff; }
+  .btn-danger { border-color: var(--color-berry); color: var(--color-berry); }
+  .btn-danger:hover { background: var(--color-berry); color: #fff; }
+
+  .field {
+    background: #fff; border-radius: .75rem; padding: .5rem .75rem;
+    border: 2px solid color-mix(in oklab, var(--color-ink) 20%, transparent);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field:hover { border-color: var(--color-grape); }
+  .field:focus { outline: none; border-color: var(--color-grape); box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-grape) 22%, transparent); }
+
+  /* dashed border = stitched seam */
+  .card {
+    background: #fff; border-radius: 1.25rem; padding: 1rem;
+    border: 2px dashed color-mix(in oklab, var(--color-ink) 25%, transparent);
+  }
+  .card-lift { display: block; transition: transform .2s, border-color .2s, box-shadow .2s; }
+  .card-lift:hover { transform: translateY(-4px) rotate(-1deg); border-color: var(--pop, var(--color-berry)); box-shadow: 4px 6px 0 var(--pop, var(--color-sun)); }
+  .card-lift img { transition: transform .3s; }
+  .card-lift:hover img { transform: scale(1.06); }
+  .card-lift:hover .yarn { animation: wiggle .6s ease; }
+
+  .pill {
+    display: inline-block; background: #fff; border: 2px solid var(--color-ink); border-radius: 999px;
+    padding: .2rem .9rem; font-weight: 600; text-transform: capitalize;
+    transition: background-color .15s, color .15s, transform .15s;
+  }
+  .pill:hover { background: var(--pop, var(--color-sun)); transform: translateY(-2px); }
+  .pill-on { background: var(--color-ink); color: #fff; }
+  .pill-on:hover { background: var(--color-grape); color: #fff; }
+
+  .chip { margin-left: .5rem; border-radius: 999px; background: var(--color-sun); padding: .1rem .6rem; font-size: .75rem; font-weight: 700; }
+
+  .opt {
+    display: flex; align-items: center; gap: .5rem; padding: .4rem .6rem; border-radius: .75rem;
+    cursor: pointer; transition: background-color .15s;
+  }
+  .opt:hover { background: color-mix(in oklab, var(--color-sun) 40%, white); }
+  .opt:has(input:checked) { background: var(--color-sky); }
+
+  .logo { display: inline-flex; align-items: center; gap: .5rem; font: 700 2.1rem var(--font-display), sans-serif; color: var(--color-ink); transition: color .2s; }
+  .logo:hover { color: var(--color-berry); }
+  .logo .ball { width: 46px; height: 46px; border-radius: 50%; }
+  .logo:hover .ball { animation: wiggle .6s ease; }
+  .nav-link { border-radius: 999px; padding: .25rem .8rem; font-weight: 600; transition: background-color .15s; }
+  .nav-link:hover { background: var(--pop, var(--color-sun)); }
+
+  .hero-art {
+    border: 3px solid var(--color-ink); border-radius: 2rem; box-shadow: 6px 8px 0 var(--color-sun);
+    transition: transform .3s cubic-bezier(.3, 1.6, .5, 1), box-shadow .3s;
+  }
+  .hero-art:hover { transform: rotate(2deg) scale(1.03); box-shadow: 10px 12px 0 var(--color-pink); }
+}
+
+@keyframes pop { 40% { transform: scale(1.6) rotate(-8deg); } }
+@keyframes wiggle { 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+.pop { display: inline-block; animation: pop .45s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
+  .btn:hover, .card-lift:hover, .pill:hover, .hero-art:hover { transform: none; }
+}

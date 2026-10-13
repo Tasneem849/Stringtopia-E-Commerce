@@ -1,0 +1,30 @@
+# Render Blueprint: creates the API service. Values marked `sync: false` are asked for when you apply it.
+services:
+  - type: web
+    name: stringtopia-api
+    runtime: node
+    region: frankfurt
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: CURRENCY
+        value: EGP
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGO_URI
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PICKUP_ADDRESS
+        sync: false
+      - key: DELIVERY_FEE
+        sync: false
