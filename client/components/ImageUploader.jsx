@@ -22,7 +22,7 @@ export default function ImageUploader({ images, onChange }) {
         if (list.length >= MAX_PHOTOS) throw new Error(`Up to ${MAX_PHOTOS} photos per product`);
         if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image`);
         if (file.size > MAX_MB * 1024 * 1024) throw new Error(`${file.name} is larger than ${MAX_MB} MB`);
-        const s = await api('/uploads/sign', { token });
+        const s = await api('/admin/uploads/sign', { token });
         const form = new FormData();
         form.append('file', file);
         form.append('api_key', s.apiKey);

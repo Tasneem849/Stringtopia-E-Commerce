@@ -12,7 +12,7 @@ export default function AdminProducts() {
   const [list, setList] = useState([]);
   const [f, setF] = useState(BLANK);
   const [err, setErr] = useState('');
-  const load = () => api('/products?limit=50').then((d) => setList(d.products)).catch((e) => setErr(e.message));
+  const load = () => api('/admin/products?limit=50').then((d) => setList(d.products)).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
   const bind = (k) => ({ value: f[k], onChange: (e) => setF({ ...f, [k]: e.target.value }) });
 
@@ -27,7 +27,7 @@ export default function AdminProducts() {
       images: f.images,
     };
     try {
-      await api(f.id ? `/products/${f.id}` : '/products', { token, method: f.id ? 'PUT' : 'POST', body });
+      await api(f.id ? `/admin/products/${f.id}` : '/admin/products', { token, method: f.id ? 'PUT' : 'POST', body });
       setF(BLANK);
       load();
     } catch (ex) {
@@ -42,7 +42,7 @@ export default function AdminProducts() {
 
   async function remove(p) {
     if (!confirm(`Delete ${p.name}?`)) return;
-    await api(`/products/${p._id}`, { token, method: 'DELETE' }).catch((ex) => setErr(ex.message));
+    await api(`/admin/products/${p._id}`, { token, method: 'DELETE' }).catch((ex) => setErr(ex.message));
     load();
   }
 

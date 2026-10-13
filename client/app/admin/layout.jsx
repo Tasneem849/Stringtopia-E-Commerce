@@ -9,10 +9,11 @@ export default function AdminLayout({ children }) {
   if (user?.role !== 'admin') return <p>Admins only. <Link href="/login" className="underline">Log in</Link></p>;
   return (
     <>
-      <nav className="mb-4 flex gap-4 border-b pb-2 font-medium">
+      <nav className="mb-4 flex flex-wrap gap-4 border-b pb-2 font-medium">
         <Link className="nav-link" href="/admin">Reservation requests</Link>
         <Link className="nav-link" href="/admin/orders">Orders</Link>
         <Link className="nav-link" href="/admin/products">Products</Link>
+        <Link className="nav-link" href="/admin/audio">Background audio</Link>
       </nav>
       {children}
     </>

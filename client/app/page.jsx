@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { api, money } from '@/lib/api';
-import Thumb from '@/components/Thumb';
+import { api } from '@/lib/api';
+import ProductCard from '@/components/ProductCard';
+import BrandArtwork from '@/components/BrandArtwork';
 
 const CATEGORIES = ['Keychains', 'Amigurumi', 'Bags', 'Baby & Kids', 'Home & Lifestyle', 'Wearables', 'Collections', 'Custom'];
 const pill = (on) => `pill ${on ? 'pill-on' : ''}`;
@@ -37,7 +38,7 @@ export default async function Home({ searchParams }) {
             Buy what is in stock and we send it to you or to a friend. Found something sold out? Ask us to make it for you.
           </p>
         </div>
-        <img src="/stringtopia.jpg" alt="Stringtopia's teddy bear king, holding a crochet hook on a hill of yarn" className="hero-art w-full" />
+        <BrandArtwork src="/stringtopia.jpg" alt="Stringtopia's teddy bear king, holding a crochet hook on a hill of yarn" className="hero-art w-full" />
       </section>
       <form className="catalog-search" method="get">
         <div className="catalog-search-main">
@@ -93,23 +94,16 @@ export default async function Home({ searchParams }) {
 
       <div className="yarn-cycle grid grid-cols-2 gap-4 md:grid-cols-3">
         {products.map((p) => (
-          <Link key={p._id} href={`/products/${p.slug}`} className="card card-lift">
-            <Thumb src={p.images?.[0]} />
-            <h2 className="mt-2 text-xl font-bold">{p.name}</h2>
-            <p className="text-sm text-stone-600">
-              {money(p.price)}
-              {p.stock === 0 && <span className="chip">Sold out: reserve it</span>}
-            </p>
-          </Link>
+          <ProductCard key={p._id} product={p} />
         ))}
       </div>
       {!products.length && <p>No pieces found.</p>}
 
       {pages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-4 text-sm">
-          {page > 1 && <Link href={link({ page: page - 1 })}>← Prev</Link>}
+          {page > 1 && <Link href={link({ page: page - 1 })} className="catalog-pagination-link">← Prev</Link>}
           <span>Page {page} of {pages}</span>
-          {page < pages && <Link href={link({ page: page + 1 })}>Next →</Link>}
+          {page < pages && <Link href={link({ page: page + 1 })} className="catalog-pagination-link">Next →</Link>}
         </div>
       )}
     </>

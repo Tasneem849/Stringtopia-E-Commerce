@@ -85,12 +85,12 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
   test('only admins can manage products and see all orders', async () => {
     const customerToken = await register('c@test.com');
     const payload = { name: 'Beanie', price: 5000, stock: 2 };
-    assert.equal((await call('/api/products', { method: 'POST', body: payload })).status, 401);
-    assert.equal((await call('/api/products', { method: 'POST', token: customerToken, body: payload })).status, 403);
-    assert.equal((await call('/api/products', { method: 'POST', token: adminToken, body: payload })).status, 201);
-    assert.equal((await call('/api/products', { method: 'POST', token: adminToken, body: { ...payload, images: ['http://insecure.example/a.jpg'] } })).status, 400);
-    assert.equal((await call('/api/orders', { token: customerToken })).status, 403);
-    assert.equal((await call('/api/orders', { token: adminToken })).status, 200);
+    assert.equal((await call('/api/admin/products', { method: 'POST', body: payload })).status, 401);
+    assert.equal((await call('/api/admin/products', { method: 'POST', token: customerToken, body: payload })).status, 403);
+    assert.equal((await call('/api/admin/products', { method: 'POST', token: adminToken, body: payload })).status, 201);
+    assert.equal((await call('/api/admin/products', { method: 'POST', token: adminToken, body: { ...payload, images: ['http://insecure.example/a.jpg'] } })).status, 400);
+    assert.equal((await call('/api/admin/orders', { token: customerToken })).status, 403);
+    assert.equal((await call('/api/admin/orders', { token: adminToken })).status, 200);
   });
 
   test('catalog: search, category filter and pagination', async () => {
@@ -149,8 +149,8 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
     assert.equal(made.body.status, 'requested');
     assert.equal((await Product.findById(soldOut.id)).stock, 0); // nothing is held for a reservation
 
-    assert.equal((await call(`/api/orders/${made.body._id}/approve`, { method: 'POST', token, body: {} })).status, 403); // not the customer's call
-    const approved = await call(`/api/orders/${made.body._id}/approve`, { method: 'POST', token: adminToken, body: { eta: '2 weeks' } });
+    assert.equal((await call(`/api/admin/orders/${made.body._id}/approve`, { method: 'POST', token, body: {} })).status, 403); // not the customer's call
+    const approved = await call(`/api/admin/orders/${made.body._id}/approve`, { method: 'POST', token: adminToken, body: { eta: '2 weeks' } });
     assert.equal(approved.body.status, 'approved');
     paymobCalls.length = 0;
     const pay = await call(`/api/orders/pay/${approved.body.publicToken}`, { method: 'POST' });
@@ -162,7 +162,7 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
     const token = await register('declined@test.com');
     const soldOut = await newProduct({ stock: 0 });
     const made = await reserveAs(token, [{ productId: soldOut.id, qty: 1 }]);
-    const declined = await call(`/api/orders/${made.body._id}/decline`, { method: 'POST', token: adminToken, body: { reason: 'Too busy' } });
+    const declined = await call(`/api/admin/orders/${made.body._id}/decline`, { method: 'POST', token: adminToken, body: { reason: 'Too busy' } });
     assert.equal(declined.body.status, 'declined');
     assert.equal((await call(`/api/orders/pay/${made.body.publicToken}`, { method: 'POST' })).status, 410);
   });

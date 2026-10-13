@@ -14,6 +14,9 @@ const schema = new mongoose.Schema({
     qty: Number,
   }],
   total: Number,
+  paymentMethod: { type: String, enum: ['paymob', 'instapay', 'cod'], default: 'paymob', index: true },
+  paymentStatus: { type: String, enum: ['unpaid', 'awaiting_confirmation', 'paid'], default: 'unpaid', index: true },
+  instaPayReference: { type: String, trim: true },
   status: {
     type: String,
     enum: ['requested', 'pending', 'approved', 'paid', 'shipped', 'declined', 'cancelled', 'expired'],

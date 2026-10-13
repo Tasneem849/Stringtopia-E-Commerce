@@ -10,13 +10,13 @@ export default function Requests() {
   const [orders, setOrders] = useState(null);
   const [text, setText] = useState({});
   const [err, setErr] = useState('');
-  const load = () => api('/orders?status=requested', { token }).then(setOrders).catch((e) => setErr(e.message));
+  const load = () => api('/admin/orders?status=requested', { token }).then(setOrders).catch((e) => setErr(e.message));
   useEffect(() => { if (token) load(); }, [token]);
 
   async function act(id, action, body) {
     setErr('');
     try {
-      await api(`/orders/${id}/${action}`, { token, method: 'POST', body });
+      await api(`/admin/orders/${id}/${action}`, { token, method: 'POST', body });
     } catch (e) {
       setErr(e.message);
     }

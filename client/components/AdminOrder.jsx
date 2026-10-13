@@ -11,6 +11,8 @@ export default function AdminOrder({ o, children }) {
         <span className="text-stone-500">{new Date(o.createdAt).toLocaleString()}</span>
       </div>
       <p>{o.user ? `${o.user.name} (${o.user.email})` : `Guest ${o.email || ''}`}{o.customer?.phone ? `, ${o.customer.phone}` : ''}</p>
+      <p><strong>Payment:</strong> {o.paymentMethod === 'cod' ? 'Cash on Delivery' : o.paymentMethod === 'instapay' ? 'InstaPay' : 'Paymob'}{o.paymentStatus === 'awaiting_confirmation' ? ' · awaiting confirmation' : o.paymentStatus === 'unpaid' ? ' · unpaid' : ''}</p>
+      {o.instaPayReference && <p><strong>InstaPay transfer reference:</strong> {o.instaPayReference}</p>}
       {o.items.map((i) => <p key={i._id}>{i.qty} × {i.name}</p>)}
       <p className="font-medium">
         {money(o.total)}{o.shippingFee ? ` (includes ${money(o.shippingFee)} delivery)` : ''}

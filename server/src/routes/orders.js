@@ -6,7 +6,7 @@ import User from '../models/User.js';
 import { mail } from '../email.js';
 import { createCheckout, isValidHmac } from '../paymob.js';
 import { feeFor, sumTotal, toEgPhone } from '../pricing.js';
-import { protect, optionalAuth, adminOnly } from '../middleware/auth.js';
+import { protect, optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -29,6 +29,7 @@ const deliverySchema = z.discriminatedUnion('method', [
   }),
 ]);
 const customerSchema = z.object({ name: z.string().min(2).max(80), phone: z.string().min(8).max(20) });
+const paymentMethodSchema = z.enum(['paymob', 'instapay', 'cod']).default('paymob');
 
 // ---- stock helpers: in-stock items are HELD (decremented) the moment a direct checkout starts ----
 
@@ -70,7 +71,7 @@ async function closeOrder(filter, status, extra = {}) {
 // Expire an order; reservations (no held stock) also tell the customer. Abandoned checkouts stay quiet.
 async function expire(filter) {
   const order = await closeOrder(filter, 'expired');
-  if (order && !order.stockHeld) mail.expired(order);
+  if (order && (!order.stockHeld || ['instapay', 'cod'].includes(order.paymentMethod))) mail.expired(order);
   return order;
 }
 
@@ -82,9 +83,12 @@ async function startPayment(order) {
 
 // ---- direct checkout (guests welcome): hold stock, then send the customer to Paymob ----
 router.post('/checkout', optionalAuth, async (req, res) => {
-  const { items, delivery, customer } = z.object({
+  const { items, delivery, customer, paymentMethod } = z.object({
     items: itemsSchema, delivery: deliverySchema, customer: customerSchema.extend({ email: z.string().email() }),
+    paymentMethod: paymentMethodSchema,
   }).parse(req.body);
+  if (paymentMethod === 'instapay' && !process.env.INSTAPAY_ADDRESS)
+    throw fail(503, 'InstaPay payment details are not configured yet');
   const lines = await buildLines(items);
   await holdStock(lines);
   let order;
@@ -92,15 +96,17 @@ router.post('/checkout', optionalAuth, async (req, res) => {
     order = await Order.create({
       user: req.user?.id, email: customer.email.toLowerCase(), customer: { name: customer.name, phone: toEgPhone(customer.phone) },
       items: lines, delivery, shippingFee: feeFor(delivery), total: sumTotal(lines) + feeFor(delivery), stockHeld: true,
+      paymentMethod, paymentStatus: paymentMethod === 'instapay' ? 'awaiting_confirmation' : 'unpaid',
     });
-    res.json({ url: await startPayment(order) });
+    if (paymentMethod === 'paymob') return res.json({ url: await startPayment(order) });
+    mail.orderPlaced(order);
+    res.json({ publicToken: order.publicToken, paymentReference: String(order.id).toUpperCase() });
   } catch (e) {
     if (order) await closeOrder({ _id: order._id, status: 'pending' }, 'cancelled');
     else await restock(lines);
     throw e;
   }
 });
-
 // ---- reservation: ONLY when stock can't cover the quantity (sold out, or wants 2 and only 1 is left). ----
 // Seller approves/declines, then the customer pays. Nothing is held: an approved item is made to order.
 router.post('/reserve', protect, async (req, res) => {
@@ -126,23 +132,6 @@ router.post('/reserve', protect, async (req, res) => {
   res.status(201).json(order);
 });
 
-router.post('/:id/approve', protect, adminOnly, async (req, res) => {
-  const { eta } = z.object({ eta: z.string().max(100).optional() }).parse(req.body ?? {});
-  const expiresAt = new Date(Date.now() + PAY_HOURS * 3600e3);
-  const order = await Order.findOneAndUpdate({ _id: req.params.id, status: 'requested' }, { status: 'approved', expiresAt, eta }, { new: true });
-  if (!order) return res.status(409).json({ message: 'Request is no longer open' });
-  mail.approved(order); // its "Pay now" link opens /pay/<token>, which creates the Paymob checkout on demand
-  res.json(order);
-});
-
-router.post('/:id/decline', protect, adminOnly, async (req, res) => {
-  const { reason } = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
-  const order = await closeOrder({ _id: req.params.id, status: 'requested' }, 'declined', { declineReason: reason });
-  if (!order) return res.status(409).json({ message: 'Request is no longer open' });
-  mail.declined(order);
-  res.json(order);
-});
-
 router.post('/:id/cancel', protect, async (req, res) => {
   const order = await closeOrder(
     { _id: req.params.id, user: req.user.id, status: { $in: ['requested', ...AWAITING_PAYMENT] } }, 'cancelled');
@@ -155,6 +144,7 @@ router.post('/:id/cancel', protect, async (req, res) => {
 router.post('/pay/:token', async (req, res) => {
   const order = await Order.findOne({ publicToken: req.params.token });
   if (!order) throw fail(404, 'Order not found');
+  if (order.paymentMethod && order.paymentMethod !== 'paymob') throw fail(409, 'This order uses a different payment method');
   if (['paid', 'shipped'].includes(order.status)) throw fail(409, 'This order is already paid');
   if (!AWAITING_PAYMENT.includes(order.status)) throw fail(410, 'This order is no longer open. You are welcome to place a new one.');
   if (order.status === 'approved' && order.expiresAt < new Date()) throw fail(410, 'The payment window for this reservation has closed.');
@@ -175,10 +165,12 @@ export async function webhook(req, res) {
 async function settle(orderId, paidAmount) {
   const order = await Order.findById(orderId);
   if (!order) return;
+  if (order.paymentMethod && order.paymentMethod !== 'paymob') return console.error(`Order ${orderId}: Paymob callback does not match the selected payment method`);
   if (paidAmount !== order.total) return console.error(`Order ${orderId}: paid ${paidAmount} but expected ${order.total}`);
   // Claim the order atomically so repeated callbacks can't process it twice. `prev` is the order as it was.
   const prev = await Order.findOneAndUpdate(
-    { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired', 'cancelled'] } }, { status: 'paid' });
+    { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired', 'cancelled'] } },
+    { status: 'paid', paymentStatus: 'paid' });
   if (!prev) return;
 
   let short = false;
@@ -192,40 +184,45 @@ async function settle(orderId, paidAmount) {
   mail.paid(paid);
   if (short) mail.problem(paid, 'This order was paid after its stock hold expired, and some items are no longer in stock. Check availability or refund it in Paymob.');
 }
-
 // Backstop for stale orders (run every 10 min): unanswered requests, abandoned checkouts, unpaid approvals.
 export async function sweep() {
   const ago = (ms) => new Date(Date.now() - ms);
   const ttl = (+process.env.REQUEST_TTL_DAYS || 3) * 864e5;
+  const instaPayTtl = (+process.env.INSTAPAY_PAYMENT_TTL_HOURS || 24) * 3600e3;
+  const codTtl = (+process.env.COD_ORDER_TTL_DAYS || 14) * 864e5;
   const stale = await Order.find({ $or: [
     { status: 'requested', createdAt: { $lt: ago(ttl) } },
-    { status: 'pending', createdAt: { $lt: ago(3600e3) } },
+    { status: 'pending', paymentMethod: 'paymob', createdAt: { $lt: ago(3600e3) } },
+    { status: 'pending', paymentMethod: { $exists: false }, createdAt: { $lt: ago(3600e3) } },
+    { status: 'pending', paymentMethod: 'instapay', createdAt: { $lt: ago(instaPayTtl) } },
+    { status: 'pending', paymentMethod: 'cod', createdAt: { $lt: ago(codTtl) } },
     { status: 'approved', expiresAt: { $lt: ago(600e3) } },
   ] });
   for (const o of stale) await expire({ _id: o._id, status: o.status });
 }
-
 // Limited view for the thank-you page (guests have no account)
 router.get('/by-ref/:token', async (req, res) => {
   const o = await Order.findOne({ publicToken: req.params.token });
   if (!o) return res.status(404).json({ message: 'Order not found' });
-  res.json({ status: o.status, total: o.total, method: o.delivery?.method, items: o.items.map(({ name, qty }) => ({ name, qty })) });
+  res.json({
+    status: o.status, total: o.total, method: o.delivery?.method,
+    paymentMethod: o.paymentMethod || 'paymob', paymentStatus: o.paymentStatus || 'unpaid',
+    paymentReference: String(o.id).toUpperCase(), instaPayReference: o.instaPayReference || '',
+    items: o.items.map(({ name, qty }) => ({ name, qty })),
+  });
 });
 
+router.post('/by-ref/:token/instapay-reference', async (req, res) => {
+  const { reference } = z.object({ reference: z.string().trim().min(3).max(80) }).parse(req.body);
+  const order = await Order.findOneAndUpdate(
+    { publicToken: req.params.token, status: 'pending', paymentMethod: 'instapay' },
+    { instaPayReference: reference }, { new: true });
+  if (!order) throw fail(409, 'This InstaPay order is no longer awaiting confirmation');
+  mail.instapayReferenceSubmitted(order);
+  res.json({ saved: true });
+});
 router.get('/mine', protect, async (req, res) => {
   res.json(await Order.find({ user: req.user.id }).sort('-createdAt'));
-});
-
-router.get('/', protect, adminOnly, async (req, res) => {
-  const filter = req.query.status ? { status: String(req.query.status) } : {};
-  res.json(await Order.find(filter).populate('user', 'name email').sort('-createdAt'));
-});
-
-router.patch('/:id/ship', protect, adminOnly, async (req, res) => {
-  const order = await Order.findOneAndUpdate({ _id: req.params.id, status: 'paid' }, { status: 'shipped' }, { new: true });
-  if (!order) return res.status(409).json({ message: 'Only paid orders can be shipped' });
-  mail.shipped(order);
-  res.json(order);
 });
 
 export default router;

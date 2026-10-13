@@ -57,6 +57,25 @@ export const mail = {
     shell('New reservation request', `${items(o)}${o.note ? `<p>Customer note: ${esc(o.note)}</p>` : ''}`,
       { url: `${site()}/admin`, label: 'Review it' })),
 
+  orderPlaced: (o) => {
+    const isInstaPay = o.paymentMethod === 'instapay';
+    const instructions = isInstaPay
+      ? `<p>Please transfer ${money(o.total)} using InstaPay to <b>${esc(process.env.INSTAPAY_ACCOUNT_NAME || 'Stringtopia')}</b> at <b>${esc(process.env.INSTAPAY_ADDRESS)}</b>. Add this order reference to the transfer: <b>${String(o.id).toUpperCase()}</b>. We will confirm it by email.</p>`
+      : `<p>Your order is placed. Please pay ${money(o.total)} in cash ${o.delivery?.method === 'pickup' ? 'when you collect it' : 'when it arrives'}.</p>`;
+    notify(o.email, 'Your Stringtopia order is placed',
+      shell(isInstaPay ? 'Complete your InstaPay transfer' : 'Order placed', `${instructions}${items(o)}${where(o)}`,
+        { url: orderLink(o), label: 'View my order' }));
+    notify(seller(), `New ${isInstaPay ? 'InstaPay' : 'cash-on-delivery'} order (${money(o.total)})`,
+      shell('New order awaiting payment', `${instructions}${items(o)}${where(o)}`, { url: `${site()}/admin/orders`, label: 'Open orders' }));
+  },
+
+  instapayReferenceSubmitted: (o) => notify(seller(), `InstaPay reference submitted (${money(o.total)})`,
+    shell('Check an InstaPay transfer', `<p>Order ${String(o.id).toUpperCase()} submitted transfer reference <b>${esc(o.instaPayReference)}</b>.</p>${items(o)}${where(o)}`,
+      { url: `${site()}/admin/orders`, label: 'Open orders' })),
+
+  codCompleted: (o) => notify(o.email, 'Your Stringtopia order is complete',
+    shell('Thank you! 🧶', `<p>Your cash-on-delivery order has been delivered and payment received.</p>${items(o)}${where(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
   approved: (o) => notify(o.email, 'Your reservation is approved',
     shell('Approved! We can make it for you',
       `<p>${o.eta ? `Estimate: <b>${esc(o.eta)}</b>. ` : ''}Please pay by ${o.expiresAt.toUTCString()} to confirm your order.</p>${items(o)}${where(o)}`,
@@ -66,10 +85,15 @@ export const mail = {
     shell('We cannot make this one', `<p>We are not able to take this request${o.declineReason ? `: ${esc(o.declineReason)}` : '.'}</p>${items(o)}`,
       { url: site(), label: 'Browse other pieces' })),
 
-  expired: (o) => notify(o.email, 'Your reservation has expired',
-    shell('Reservation expired',
-      `<p>${o.expiresAt ? 'The payment window for your approved reservation has passed.' : 'We were not able to get to your request in time.'} You are welcome to send a new request.</p>${items(o)}`,
-      { url: site(), label: 'Back to the shop' })),
+  expired: (o) => {
+    const directOrder = ['instapay', 'cod'].includes(o.paymentMethod);
+    const title = directOrder ? 'Your order has expired' : 'Your reservation has expired';
+    const message = directOrder
+      ? 'We could not complete this order in time, so the items have been returned to stock. You are welcome to place a new order.'
+      : o.expiresAt ? 'The payment window for your approved reservation has passed.' : 'We were not able to get to your request in time.';
+    notify(o.email, title,
+      shell(title, `<p>${message}</p>${items(o)}`, { url: site(), label: 'Back to the shop' }));
+  },
 
   paid: (o) => {
     notify(o.email, 'Your Stringtopia order is confirmed',

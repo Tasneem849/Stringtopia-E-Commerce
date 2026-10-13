@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { api, money, img } from '@/lib/api';
 import Gallery from '@/components/Gallery';
 import BuyBox from '@/components/BuyBox';
+import FavoriteButton from '@/components/FavoriteButton';
 
 const get = (slug) => api(`/products/${slug}`).catch(() => null);
 
@@ -21,7 +22,10 @@ export default async function ProductPage({ params }) {
     <div className="grid gap-6 md:grid-cols-2">
       <Gallery images={p.images} />
       <div>
-        <h1 className="text-4xl font-bold">{p.name}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-4xl font-bold">{p.name}</h1>
+          <FavoriteButton product={p} />
+        </div>
         <p className="my-2 text-xl text-yarn">{money(p.price)}</p>
         <p className="mb-4 text-stone-600">{p.description}</p>
         <BuyBox product={p} />

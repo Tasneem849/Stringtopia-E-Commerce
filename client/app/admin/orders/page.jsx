@@ -4,18 +4,18 @@ import { api } from '@/lib/api';
 import { useStore } from '@/components/Providers';
 import AdminOrder from '@/components/AdminOrder';
 
-const STATUSES = ['paid', 'shipped', 'approved', 'requested', 'pending', 'declined', 'cancelled', 'expired'];
+const STATUSES = ['pending', 'paid', 'shipped', 'approved', 'requested', 'declined', 'cancelled', 'expired'];
 
 export default function AdminOrders() {
   const { token } = useStore();
-  const [status, setStatus] = useState('paid'); // paid = needs action
+  const [status, setStatus] = useState('pending');
   const [orders, setOrders] = useState(null);
   const [err, setErr] = useState('');
-  const load = () => api(`/orders?status=${status}`, { token }).then(setOrders).catch((e) => setErr(e.message));
+  const load = () => api(`/admin/orders?status=${status}`, { token }).then(setOrders).catch((e) => setErr(e.message));
   useEffect(() => { if (token) load(); }, [token, status]);
 
-  async function ship(id) {
-    await api(`/orders/${id}/ship`, { token, method: 'PATCH' }).catch((e) => setErr(e.message));
+  async function orderAction(id, action) {
+    await api(`/admin/orders/${id}/${action}`, { token, method: 'PATCH' }).catch((e) => setErr(e.message));
     load();
   }
 
@@ -27,15 +27,23 @@ export default function AdminOrders() {
           value={status} className="field capitalize"
           onChange={(e) => { setOrders(null); setStatus(e.target.value); }}
         >
-          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+          {STATUSES.map((item) => <option key={item}>{item}</option>)}
         </select>
       </div>
       {err && <p className="text-red-700">{err}</p>}
-      {!orders ? <p>Loading...</p> : !orders.length ? <p>Nothing here.</p> : orders.map((o) => (
-        <AdminOrder key={o._id} o={o}>
-          {o.status === 'paid' && (
-            <button onClick={() => ship(o._id)} className="btn btn-primary">
-              {o.delivery?.method === 'pickup' ? 'Mark ready for pickup' : 'Mark shipped'}
+      {!orders ? <p>Loading...</p> : !orders.length ? <p>Nothing here.</p> : orders.map((order) => (
+        <AdminOrder key={order._id} o={order}>
+          {order.status === 'pending' && order.paymentMethod === 'instapay' && order.paymentStatus === 'awaiting_confirmation' && (
+            <button onClick={() => orderAction(order._id, 'confirm-payment')} className="btn btn-primary">Confirm InstaPay payment</button>
+          )}
+          {order.status === 'pending' && order.paymentMethod === 'cod' && (
+            <button onClick={() => orderAction(order._id, 'complete-cod')} className="btn btn-primary">
+              {order.delivery?.method === 'pickup' ? 'Mark collected & cash received' : 'Mark delivered & cash received'}
+            </button>
+          )}
+          {order.status === 'paid' && (
+            <button onClick={() => orderAction(order._id, 'ship')} className="btn btn-primary">
+              {order.delivery?.method === 'pickup' ? 'Mark ready for pickup' : 'Mark shipped'}
             </button>
           )}
         </AdminOrder>

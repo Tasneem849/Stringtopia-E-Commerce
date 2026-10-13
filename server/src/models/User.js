@@ -7,6 +7,7 @@ const schema = new mongoose.Schema({
   password: { type: String, required() { return !this.googleId; }, select: false },
   googleId: { type: String, unique: true, sparse: true, select: false },
   role: { type: String, enum: ['customer', 'admin'], default: 'customer' },
+  favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
 }, { timestamps: true });
 
 schema.pre('save', async function () {
