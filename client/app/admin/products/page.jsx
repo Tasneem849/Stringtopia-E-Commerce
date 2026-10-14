@@ -30,6 +30,7 @@ export default function AdminProducts() {
   const [confirmation, setConfirmation] = useState(null);
   const [confirmationBusy, setConfirmationBusy] = useState(false);
   const [confirmationError, setConfirmationError] = useState('');
+  const [stockDelta, setStockDelta] = useState('1');
 
   useEffect(() => {
     let active = true;
@@ -159,6 +160,11 @@ export default function AdminProducts() {
 
   async function confirmRemoval() {
     if (!confirmation || confirmationBusy) return;
+    const stockChange = Number(stockDelta);
+    if (confirmation.type === 'stock' && (!Number.isInteger(stockChange) || stockChange === 0)) {
+      setConfirmationError('Enter a non-zero whole number. Use a positive number to add stock or a negative number to subtract it.');
+      return;
+    }
     setConfirmationBusy(true);
     setConfirmationError('');
     try {
@@ -169,11 +175,16 @@ export default function AdminProducts() {
         setCategories((current) => current.filter((item) => item._id !== category._id));
         setF((current) => current.category === category.name ? { ...current, category: '' } : current);
         setCategoryRefreshKey((value) => value + 1);
-      } else {
+      } else if (confirmation.type === 'product') {
         const product = confirmation.item;
         await api('/admin/products/' + product._id, { token, method: 'DELETE' });
         setErr('');
         if (list.length === 1 && listPage > 1) setListPage((value) => value - 1);
+        setRefreshKey((value) => value + 1);
+      } else {
+        const product = confirmation.item;
+        await api(`/admin/products/${product._id}/stock`, { token, method: 'PATCH', body: { delta: stockChange } });
+        setErr('');
         setRefreshKey((value) => value + 1);
       }
       setConfirmation(null);
@@ -184,21 +195,10 @@ export default function AdminProducts() {
     }
   }
 
-  async function adjustStock(p) {
-    const answer = window.prompt(`Adjust stock for "${p.name}". Enter a positive number to add or a negative number to subtract.`, '1');
-    if (answer === null || !answer.trim()) return;
-    const delta = Number(answer);
-    if (!Number.isInteger(delta) || delta === 0) {
-      setErr('Stock adjustment must be a non-zero whole number.');
-      return;
-    }
-    setErr('');
-    try {
-      await api(`/admin/products/${p._id}/stock`, { token, method: 'PATCH', body: { delta } });
-      setRefreshKey((value) => value + 1);
-    } catch (ex) {
-      setErr(ex.message);
-    }
+  function adjustStock(product) {
+    setStockDelta('1');
+    setConfirmationError('');
+    setConfirmation({ type: 'stock', item: product });
   }
 
   return (
@@ -332,10 +332,18 @@ export default function AdminProducts() {
       </section>}
       <ConfirmDialog
         open={Boolean(confirmation)}
-        title={confirmation?.type === 'product' ? 'Delete this product?' : 'Delete this category?'}
+        title={confirmation?.type === 'product' ? 'Delete this product?' : confirmation?.type === 'category' ? 'Delete this category?' : 'Adjust product stock'}
+        description={confirmation?.type === 'stock' ? `Set how many items to add or remove for ${confirmation.item.name}.` : undefined}
         itemName={confirmation?.item?.name || ''}
         itemType={confirmation?.type}
-        confirmLabel={confirmation?.type === 'product' ? 'Delete product' : 'Delete category'}
+        confirmLabel={confirmation?.type === 'product' ? 'Delete product' : confirmation?.type === 'category' ? 'Delete category' : 'Update stock'}
+        cancelLabel={confirmation?.type === 'stock' ? 'Cancel' : 'Keep it'}
+        busyLabel={confirmation?.type === 'stock' ? 'Updating…' : 'Removing…'}
+        inputLabel={confirmation?.type === 'stock' ? 'Stock change' : undefined}
+        inputHint={confirmation?.type === 'stock' ? 'Positive adds stock · negative removes stock · zero is not allowed.' : undefined}
+        inputValue={confirmation?.type === 'stock' ? stockDelta : undefined}
+        onInputChange={(value) => { setStockDelta(value); setConfirmationError(''); }}
+        confirmStyle={confirmation?.type === 'stock' ? 'primary' : 'danger'}
         busy={confirmationBusy}
         error={confirmationError}
         onConfirm={confirmRemoval}

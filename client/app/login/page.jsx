@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { getPostLoginPath } from '@/lib/navigation';
 import { useStore } from '@/components/Providers';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
 
@@ -17,7 +18,7 @@ export default function Login() {
     e.preventDefault();
     try {
       login(await api(`/auth/${mode}`, { method: 'POST', body: f }));
-      router.push('/');
+      router.replace(getPostLoginPath());
     } catch (e) {
       setErr(e.message);
     }

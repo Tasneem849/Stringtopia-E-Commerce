@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
 const Ctx = createContext(null);
@@ -15,6 +15,8 @@ export default function Providers({ children }) {
   const [favoritesError, setFavoritesError] = useState('');
   const [ready, setReady] = useState(false);
   const [config, setConfig] = useState({ deliveryFee: 0, pickupAddress: '', instaPayAddress: '', instaPayAccountName: '', instaPayWhatsapp: '', backgroundAudioUrl: '' });
+  const authRef = useRef(auth);
+  authRef.current = auth;
 
   useEffect(() => {
     try {
@@ -26,6 +28,18 @@ export default function Providers({ children }) {
   }, []);
   useEffect(() => { if (ready) localStorage.setItem('st_auth', JSON.stringify(auth)); }, [auth, ready]);
   useEffect(() => { if (ready) localStorage.setItem('st_cart', JSON.stringify(cart)); }, [cart, ready]);
+  useEffect(() => {
+    const handleExpiredSession = (event) => {
+      if (!event.detail?.token || authRef.current.token !== event.detail.token) return;
+      authRef.current = GUEST;
+      setAuth(GUEST);
+      setFavorites([]);
+      setFavoritesLoading(false);
+      setFavoritesError('');
+    };
+    window.addEventListener('stringtopia:auth-expired', handleExpiredSession);
+    return () => window.removeEventListener('stringtopia:auth-expired', handleExpiredSession);
+  }, []);
   useEffect(() => {
     if (!ready) return undefined;
     const missingImages = cart.filter((item) => !item.image && item.slug);
@@ -137,12 +151,14 @@ export default function Providers({ children }) {
     setFavoritesError('');
   };
   const login = (session) => {
+    authRef.current = session;
     setFavorites([]);
     setFavoritesLoading(Boolean(session?.token));
     setFavoritesError('');
     setAuth(session);
   };
   const logout = () => {
+    authRef.current = GUEST;
     setAuth(GUEST);
     setFavorites([]);
     setFavoritesLoading(false);

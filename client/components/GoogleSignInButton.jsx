@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { getPostLoginPath } from '@/lib/navigation';
 import { useStore } from './Providers';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -24,7 +25,7 @@ export default function GoogleSignInButton() {
     setError('');
     try {
       login(await api('/auth/google', { method: 'POST', body: { credential: response.credential } }));
-      router.push('/');
+      router.replace(getPostLoginPath());
     } catch (err) {
       setError(err.message || 'Google sign-in failed. Please try again.');
     } finally {

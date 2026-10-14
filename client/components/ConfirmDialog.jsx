@@ -5,9 +5,17 @@ import { useEffect, useRef } from 'react';
 export default function ConfirmDialog({
   open,
   title,
+  description,
   itemName,
   itemType = 'item',
   confirmLabel,
+  cancelLabel = 'Keep it',
+  busyLabel = 'Working…',
+  inputLabel,
+  inputHint,
+  inputValue,
+  onInputChange,
+  confirmStyle = 'danger',
   busy = false,
   error = '',
   onConfirm,
@@ -54,15 +62,31 @@ export default function ConfirmDialog({
         <p className="confirm-dialog-kicker">STRINGTOPIA · ADMIN</p>
         <h2 id="confirm-dialog-title">{title}</h2>
         <p id="confirm-dialog-description" className="confirm-dialog-copy">
-          You’re about to remove <strong>{itemName}</strong> {itemType === 'product' ? 'from your shop' : 'from your category list'}. This can’t be undone.
+          {description || <>You’re about to remove <strong>{itemName}</strong> {itemType === 'product' ? 'from your shop' : 'from your category list'}. This can’t be undone.</>}
         </p>
+        {inputLabel && (
+          <label className="confirm-dialog-input-wrap">
+            <span className="confirm-dialog-input-label">{inputLabel}</span>
+            <input
+              type="number"
+              step="1"
+              value={inputValue}
+              onChange={(event) => onInputChange(event.target.value)}
+              className="field confirm-dialog-input"
+              aria-describedby={inputHint ? 'confirm-dialog-input-hint' : undefined}
+              autoFocus
+              disabled={busy}
+            />
+            {inputHint && <span id="confirm-dialog-input-hint" className="confirm-dialog-input-hint">{inputHint}</span>}
+          </label>
+        )}
         {error && <p className="confirm-dialog-error" role="alert">{error}</p>}
         <div className="confirm-dialog-actions">
-          <button type="button" onClick={onCancel} disabled={busy} className="btn btn-ghost" autoFocus>
-            Keep it
+          <button type="button" onClick={onCancel} disabled={busy} className="btn btn-ghost" autoFocus={!inputLabel}>
+            {cancelLabel}
           </button>
-          <button type="button" onClick={onConfirm} disabled={busy} className="btn confirm-dialog-delete">
-            {busy ? 'Removing…' : confirmLabel}
+          <button type="button" onClick={onConfirm} disabled={busy} className={`btn ${confirmStyle === 'danger' ? 'confirm-dialog-delete' : 'btn-primary'}`}>
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </div>
