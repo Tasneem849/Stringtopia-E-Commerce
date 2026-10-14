@@ -18,5 +18,21 @@ if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && !(await User.exists
     .catch((e) => console.error('Could not create the admin account:', e.message));
 }
 
-setInterval(() => sweep().catch(console.error), 10 * 60 * 1000);
-app.listen(process.env.PORT || 5000, () => console.log('Stringtopia API running'));
+const sweepTimer = setInterval(() => sweep().catch(console.error), 10 * 60 * 1000);
+const server = app.listen(process.env.PORT || 5000, () => console.log('Stringtopia API running'));
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received; closing Stringtopia API gracefully`);
+  clearInterval(sweepTimer);
+  const forceClose = setTimeout(() => server.closeAllConnections(), 10000);
+  forceClose.unref();
+  server.close(async () => {
+    clearTimeout(forceClose);
+    await mongoose.disconnect();
+  });
+}
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
+process.once('SIGINT', () => void shutdown('SIGINT'));

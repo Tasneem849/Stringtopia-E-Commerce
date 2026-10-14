@@ -19,6 +19,45 @@ export function isValidHmac(obj, received) {
   return expected.length === got.length && crypto.timingSafeEqual(expected, got);
 }
 
+let inquiryToken = '';
+let inquiryTokenExpiresAt = 0;
+
+async function getInquiryToken(apiKey) {
+  if (inquiryToken && inquiryTokenExpiresAt > Date.now()) return inquiryToken;
+  const response = await fetch('https://accept.paymob.com/api/auth/tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+    signal: AbortSignal.timeout(10000),
+  });
+  const data = await response.json().catch(() => ({}));
+  const token = data.token || data.body?.token;
+  if (!response.ok || !token) throw new Error('Paymob inquiry authentication failed');
+  inquiryToken = token;
+  inquiryTokenExpiresAt = Date.now() + 50 * 60 * 1000;
+  return inquiryToken;
+}
+
+// Official Accept transaction inquiry by merchant reference. Uses the merchant API key,
+// separate from the intention secret key (`PAYMOB_SECRET_KEY`).
+export async function inquireTransactionByReference(reference) {
+  const apiKey = process.env.PAYMOB_API_KEY;
+  if (!apiKey || !reference) return null;
+  const authToken = await getInquiryToken(apiKey);
+  const response = await fetch('https://accept.paymob.com/api/ecommerce/orders/transaction_inquiry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auth_token: authToken, merchant_order_id: reference }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 404) return null;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !Number.isFinite(Number(data.amount_cents)) || data.id == null) {
+    throw new Error(`Paymob transaction inquiry failed with status ${response.status}`);
+  }
+  return data;
+}
+
 // Creates a payment and returns the Paymob checkout address to send the customer to.
 export async function createCheckout(order, attempt) {
   const { PAYMOB_SECRET_KEY, PAYMOB_PUBLIC_KEY, PAYMOB_INTEGRATION_IDS, CLIENT_URL } = process.env;
@@ -30,6 +69,7 @@ export async function createCheckout(order, attempt) {
   const res = await fetch('https://accept.paymob.com/v1/intention/', {
     method: 'POST',
     headers: { Authorization: `Token ${PAYMOB_SECRET_KEY}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
       amount: order.total,
       currency: (process.env.CURRENCY || 'EGP').toUpperCase(),
@@ -53,5 +93,8 @@ export async function createCheckout(order, attempt) {
     console.error('Paymob error', res.status, JSON.stringify(data));
     throw fail(502, 'We could not start the payment. Please try again in a moment.');
   }
-  return `https://accept.paymob.com/unifiedcheckout/?publicKey=${PAYMOB_PUBLIC_KEY}&clientSecret=${data.client_secret}`;
+  return {
+    url: `https://accept.paymob.com/unifiedcheckout/?publicKey=${PAYMOB_PUBLIC_KEY}&clientSecret=${data.client_secret}`,
+    paymobOrderId: data.intention_order_id || data.order?.id || '',
+  };
 }

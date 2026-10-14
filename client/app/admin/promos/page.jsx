@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, money } from '@/lib/api';
 import { useStore } from '@/components/Providers';
 
-const NEW_PROMO = { code: '', discountType: 'percentage', discountValue: '10', active: true };
+const NEW_PROMO = { code: '', discountType: 'percentage', discountValue: '10', active: true, minimumOrder: '', usageLimit: '', startsAt: '', expiresAt: '' };
 
 export default function AdminPromoCodes() {
   const { token } = useStore();
@@ -49,6 +49,10 @@ export default function AdminPromoCodes() {
           discountType: draft.discountType,
           discountValue: draft.discountType === 'fixed' ? Math.round(amount * 100) : Math.round(amount),
           active: draft.active,
+          minimumOrder: Math.round((Number(draft.minimumOrder) || 0) * 100),
+          ...(draft.usageLimit ? { usageLimit: Number(draft.usageLimit) } : {}),
+          ...(draft.startsAt ? { startsAt: new Date(draft.startsAt).toISOString() } : {}),
+          ...(draft.expiresAt ? { expiresAt: new Date(draft.expiresAt).toISOString() } : {}),
         },
       });
       setPromos((current) => [created, ...(current || [])]);
@@ -140,6 +144,25 @@ export default function AdminPromoCodes() {
           </label>
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm font-semibold" htmlFor="promo-minimum-order">
+            Minimum items total (EGP)
+            <input id="promo-minimum-order" type="number" min="0" step="0.01" value={draft.minimumOrder} onChange={(event) => setDraft((current) => ({ ...current, minimumOrder: event.target.value }))} className="field w-full" />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold" htmlFor="promo-usage-limit">
+            Maximum uses (optional)
+            <input id="promo-usage-limit" type="number" min="1" step="1" value={draft.usageLimit} onChange={(event) => setDraft((current) => ({ ...current, usageLimit: event.target.value }))} className="field w-full" />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold" htmlFor="promo-starts-at">
+            Starts at (optional)
+            <input id="promo-starts-at" type="datetime-local" value={draft.startsAt} onChange={(event) => setDraft((current) => ({ ...current, startsAt: event.target.value }))} className="field w-full" />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold" htmlFor="promo-expires-at">
+            Expires at (optional)
+            <input id="promo-expires-at" type="datetime-local" value={draft.expiresAt} onChange={(event) => setDraft((current) => ({ ...current, expiresAt: event.target.value }))} className="field w-full" />
+          </label>
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -170,6 +193,10 @@ export default function AdminPromoCodes() {
                 </span>
               </div>
               <p>{discountLabel(promo)}</p>
+              {promo.minimumOrder > 0 && <p>Minimum items total: {money(promo.minimumOrder)}</p>}
+              {promo.usageLimit && <p>Uses: {promo.redemptionCount || 0} of {promo.usageLimit}</p>}
+              {promo.startsAt && <p>Starts: {new Date(promo.startsAt).toLocaleString()}</p>}
+              {promo.expiresAt && <p>Expires: {new Date(promo.expiresAt).toLocaleString()}</p>}
             </div>
             <button
               type="button"

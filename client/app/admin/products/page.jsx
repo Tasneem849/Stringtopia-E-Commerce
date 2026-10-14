@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import ProductPrice from '@/components/ProductPrice';
 import { useStore } from '@/components/Providers';
 import ImageUploader from '@/components/ImageUploader';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const BLANK = { id: null, name: '', price: '', salePrice: '', stock: '1', category: '', colors: '', images: [], description: '' };
 const input = 'field w-full';
@@ -12,6 +13,9 @@ export default function AdminProducts() {
   const { token } = useStore();
   const [view, setView] = useState('add');
   const [list, setList] = useState([]);
+  const [listPage, setListPage] = useState(1);
+  const [listPages, setListPages] = useState(1);
+  const [listTotal, setListTotal] = useState(0);
   const [f, setF] = useState(BLANK);
   const [err, setErr] = useState('');
   const [listError, setListError] = useState('');
@@ -23,6 +27,9 @@ export default function AdminProducts() {
   const [categoryLoading, setCategoryLoading] = useState(true);
   const [categoryBusy, setCategoryBusy] = useState(false);
   const [categoryRefreshKey, setCategoryRefreshKey] = useState(0);
+  const [confirmation, setConfirmation] = useState(null);
+  const [confirmationBusy, setConfirmationBusy] = useState(false);
+  const [confirmationError, setConfirmationError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -36,8 +43,13 @@ export default function AdminProducts() {
       setLoadingList(true);
       setListError('');
       try {
-        const data = await api('/admin/products?limit=50', { token });
-        if (active) setList(Array.isArray(data?.products) ? data.products : []);
+        const data = await api(`/admin/products?limit=20&page=${listPage}`, { token });
+        if (active) {
+          setList(Array.isArray(data?.products) ? data.products : []);
+          setListPage(data?.page || 1);
+          setListPages(data?.pages || 1);
+          setListTotal(data?.total || 0);
+        }
       } catch (error) {
         if (active) {
           setList([]);
@@ -49,7 +61,7 @@ export default function AdminProducts() {
     }
     loadProducts();
     return () => { active = false; };
-  }, [token, refreshKey]);
+  }, [token, refreshKey, listPage]);
 
   useEffect(() => {
     let active = true;
@@ -97,21 +109,11 @@ export default function AdminProducts() {
     }
   }
 
-  async function deleteCategory(category) {
+  function deleteCategory(category) {
     if (category.productCount > 0) return;
-    if (!confirm('Delete the "' + category.name + '" category?')) return;
-    setCategoryBusy(true);
     setCategoryError('');
-    try {
-      await api('/admin/categories/' + category._id, { token, method: 'DELETE' });
-      setCategories((current) => current.filter((item) => item._id !== category._id));
-      setF((current) => current.category === category.name ? { ...current, category: '' } : current);
-      setCategoryRefreshKey((value) => value + 1);
-    } catch (error) {
-      setCategoryError(error.message);
-    } finally {
-      setCategoryBusy(false);
-    }
+    setConfirmationError('');
+    setConfirmation({ type: 'category', item: category });
   }
 
   async function save(e) {
@@ -126,13 +128,14 @@ export default function AdminProducts() {
     const body = {
       name: f.name, description: f.description, category: f.category || undefined,
       price: regularPrice, salePrice,
-      stock: parseInt(f.stock, 10),
+      ...(f.id ? {} : { stock: parseInt(f.stock, 10) }),
       colors: f.colors.split(',').map((c) => c.trim()).filter(Boolean),
       images: f.images,
     };
     try {
       await api(f.id ? `/admin/products/${f.id}` : '/admin/products', { token, method: f.id ? 'PUT' : 'POST', body });
       setF(BLANK);
+      setListPage(1);
       setView('manage');
       setRefreshKey((value) => value + 1);
     } catch (ex) {
@@ -149,12 +152,49 @@ export default function AdminProducts() {
     setView('add');
   };
 
-  async function remove(p) {
-    if (!confirm('Delete "' + p.name + '"?')) return;
+  function remove(p) {
+    setConfirmationError('');
+    setConfirmation({ type: 'product', item: p });
+  }
+
+  async function confirmRemoval() {
+    if (!confirmation || confirmationBusy) return;
+    setConfirmationBusy(true);
+    setConfirmationError('');
+    try {
+      if (confirmation.type === 'category') {
+        const category = confirmation.item;
+        await api('/admin/categories/' + category._id, { token, method: 'DELETE' });
+        setCategoryError('');
+        setCategories((current) => current.filter((item) => item._id !== category._id));
+        setF((current) => current.category === category.name ? { ...current, category: '' } : current);
+        setCategoryRefreshKey((value) => value + 1);
+      } else {
+        const product = confirmation.item;
+        await api('/admin/products/' + product._id, { token, method: 'DELETE' });
+        setErr('');
+        if (list.length === 1 && listPage > 1) setListPage((value) => value - 1);
+        setRefreshKey((value) => value + 1);
+      }
+      setConfirmation(null);
+    } catch (error) {
+      setConfirmationError(error.message);
+    } finally {
+      setConfirmationBusy(false);
+    }
+  }
+
+  async function adjustStock(p) {
+    const answer = window.prompt(`Adjust stock for "${p.name}". Enter a positive number to add or a negative number to subtract.`, '1');
+    if (answer === null || !answer.trim()) return;
+    const delta = Number(answer);
+    if (!Number.isInteger(delta) || delta === 0) {
+      setErr('Stock adjustment must be a non-zero whole number.');
+      return;
+    }
     setErr('');
     try {
-      await api('/admin/products/' + p._id, { token, method: 'DELETE' });
-      setErr('');
+      await api(`/admin/products/${p._id}/stock`, { token, method: 'PATCH', body: { delta } });
       setRefreshKey((value) => value + 1);
     } catch (ex) {
       setErr(ex.message);
@@ -178,7 +218,7 @@ export default function AdminProducts() {
           aria-pressed={view === 'manage'}
           onClick={() => setView('manage')}
           className={`btn ${view === 'manage' ? 'btn-primary' : 'btn-ghost'}`}
-        >Manage products ({list.length})</button>
+        >Manage products ({listTotal})</button>
       </div>
 
       {view === 'add' && <section id="product-add-panel" aria-labelledby="product-add-tab">
@@ -188,7 +228,10 @@ export default function AdminProducts() {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <input required type="number" step="0.01" min="0" placeholder="Regular price (EGP)" {...bind('price')} className={input} />
           <input aria-label="Sale price in EGP (optional)" type="number" step="0.01" min="0" placeholder="Sale price (optional)" {...bind('salePrice')} className={input} />
-          <input required type="number" min="0" placeholder="Stock" {...bind('stock')} className={input} />
+          <label className="space-y-1">
+            <input required type="number" min="0" placeholder="Stock" {...bind('stock')} disabled={Boolean(f.id)} className={input} />
+            {f.id && <span className="block text-xs text-stone-500">Adjust existing stock from Manage products.</span>}
+          </label>
         </div>
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="min-w-0 space-y-1">
@@ -257,7 +300,7 @@ export default function AdminProducts() {
           <button type="button" onClick={() => { setF(BLANK); setErr(''); setView('add'); }} className="btn btn-primary whitespace-nowrap">Add new product</button>
         </div>
         <div className="flex items-center justify-between gap-3 text-sm text-stone-600">
-          <span>{list.length} products</span>
+          <span>Showing {list.length} of {listTotal} products</span>
           <button type="button" onClick={() => setRefreshKey((value) => value + 1)} className="cursor-pointer underline">Refresh</button>
         </div>
         {err && <p role="alert" className="text-red-700">{err}</p>}
@@ -274,13 +317,30 @@ export default function AdminProducts() {
               </p>
             </div>
             <div className="flex gap-3 text-sm">
+              <button type="button" onClick={() => adjustStock(p)} className="cursor-pointer underline">Adjust stock</button>
               <button type="button" onClick={() => edit(p)} className="cursor-pointer underline">Edit</button>
               <button type="button" onClick={() => remove(p)} className="cursor-pointer text-red-700 underline">Delete</button>
             </div>
           </div>
         ))}
         </div>
+        {listPages > 1 && <div className="flex items-center justify-center gap-4 text-sm">
+          <button type="button" className="cursor-pointer underline disabled:cursor-not-allowed disabled:text-stone-400" disabled={listPage <= 1 || loadingList} onClick={() => setListPage((value) => value - 1)}>← Previous</button>
+          <span>Page {listPage} of {listPages}</span>
+          <button type="button" className="cursor-pointer underline disabled:cursor-not-allowed disabled:text-stone-400" disabled={listPage >= listPages || loadingList} onClick={() => setListPage((value) => value + 1)}>Next →</button>
+        </div>}
       </section>}
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={confirmation?.type === 'product' ? 'Delete this product?' : 'Delete this category?'}
+        itemName={confirmation?.item?.name || ''}
+        itemType={confirmation?.type}
+        confirmLabel={confirmation?.type === 'product' ? 'Delete product' : 'Delete category'}
+        busy={confirmationBusy}
+        error={confirmationError}
+        onConfirm={confirmRemoval}
+        onCancel={() => { if (!confirmationBusy) { setConfirmation(null); setConfirmationError(''); } }}
+      />
     </div>
   );
 }

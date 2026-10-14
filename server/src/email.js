@@ -12,8 +12,8 @@ if (process.env.SMTP_HOST) {
 const seller = () => process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL;
 const site = () => process.env.CLIENT_URL;
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); // customer text goes into HTML
-const money = (cents) =>
-  new Intl.NumberFormat('en-EG', { style: 'currency', currency: (process.env.CURRENCY || 'EGP').toUpperCase() }).format(cents / 100);
+const money = (piasters) =>
+  new Intl.NumberFormat('en-EG', { style: 'currency', currency: (process.env.CURRENCY || 'EGP').toUpperCase() }).format(piasters / 100);
 
 async function send(to, subject, html) {
   if (!to) return;
@@ -76,9 +76,15 @@ export const mail = {
   codCompleted: (o) => notify(o.email, 'Your Stringtopia order is complete',
     shell('Thank you! 🧶', `<p>Your cash-on-delivery order has been delivered and payment received.</p>${items(o)}${where(o)}`,
       { url: orderLink(o), label: 'View my order' })),
+  outForDelivery: (o) => notify(o.email, 'Your Stringtopia order is out for delivery',
+    shell('Your order is on its way', `<p>Your crochet order is out for delivery. Please have the cash ready for the courier.</p>${items(o)}${where(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
+  cancelled: (o) => notify(o.email, 'Your Stringtopia order was cancelled',
+    shell('Order cancelled', `<p>Your order was cancelled by Stringtopia. Any held items have been returned to stock.</p>${items(o)}${where(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
   approved: (o) => notify(o.email, 'Your reservation is approved',
     shell('Approved! We can make it for you',
-      `<p>${o.eta ? `Estimate: <b>${esc(o.eta)}</b>. ` : ''}Please pay by ${o.expiresAt.toUTCString()} to confirm your order.</p>${items(o)}${where(o)}`,
+      `<p>${o.eta ? `Estimate: <b>${esc(o.eta)}</b>. ` : ''}Please pay by ${new Intl.DateTimeFormat('en-EG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Cairo' }).format(o.expiresAt)} Cairo time to confirm your order.</p>${items(o)}${where(o)}`,
       { url: `${site()}/pay/${o.publicToken}`, label: 'Pay now' })),
 
   declined: (o) => notify(o.email, 'About your reservation request',

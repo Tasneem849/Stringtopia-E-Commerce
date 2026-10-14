@@ -15,6 +15,7 @@ export default function Thanks() {
   const [referenceSaved, setReferenceSaved] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
   const [referenceError, setReferenceError] = useState('');
+  const [paymentCheckNotice, setPaymentCheckNotice] = useState('');
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -33,8 +34,20 @@ export default function Thanks() {
         if (!active) return;
         setOrder(current);
         setTransferReference(current.instaPayReference || '');
-        if (!paymentFailed && current.paymentMethod === 'paymob' && current.status === 'pending' && ++tries < 10)
-          timer = window.setTimeout(load, 1500);
+        if (!paymentFailed && current.paymentMethod === 'paymob' && ['pending', 'approved'].includes(current.status)) {
+          if (++tries < 10) timer = window.setTimeout(load, 1500);
+          else {
+            try {
+              const verified = await api(`/orders/by-ref/${token}/reconcile`, { method: 'POST' });
+              if (active) {
+                setOrder((previous) => previous ? { ...previous, ...verified } : previous);
+                if (!verified.verified) setPaymentCheckNotice('Paymob has not confirmed this payment yet. Please keep your receipt and check My orders or the payment link in your email shortly.');
+              }
+            } catch {
+              if (active) setPaymentCheckNotice('Payment confirmation is taking longer than usual. You can check this order again from My orders or use the payment link in your email.');
+            }
+          }
+        }
       } catch (loadError) {
         if (active) setError(loadError.message);
       }
@@ -78,6 +91,7 @@ export default function Thanks() {
       {order.items.map((item, index) => <p key={index}>{item.qty} × {item.name}</p>)}
       {order.promoCode && order.discountAmount > 0 && <p className="checkout-promo-feedback checkout-promo-feedback-success">Promo {order.promoCode}: saved {money(order.discountAmount)}</p>}
       <p className="font-medium">Total: {money(order.total)}</p>
+      {paymentCheckNotice && <p className="text-sm text-stone-600" role="status">{paymentCheckNotice}</p>}
       {order.method === 'pickup' && config.pickupAddress && <p className="text-sm">Pick up at: {config.pickupAddress}</p>}
 
       {isCashOnDelivery && order.status === 'pending' && (

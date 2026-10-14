@@ -6,15 +6,22 @@ export const hasSalePrice = (product) =>
   Number.isFinite(product?.salePrice) && Number.isFinite(product?.price) && product.salePrice >= 0 && product.salePrice < product.price;
 export const effectivePrice = (product) => hasSalePrice(product) ? product.salePrice : product.price;
 
-export async function api(path, { token, method = 'GET', body } = {}) {
-  const res = await fetch(API + path, {
+export async function api(path, { token, method = 'GET', body, revalidate, timeoutMs } = {}) {
+  const init = {
     method,
     headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
     body: body && JSON.stringify(body),
-    cache: 'no-store',
-  });
+  };
+  if (revalidate != null && method === 'GET' && !token) init.next = { revalidate };
+  else init.cache = 'no-store';
+  if (timeoutMs) init.signal = AbortSignal.timeout(timeoutMs);
+  const res = await fetch(API + path, init);
   const data = res.status === 204 ? null : await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.message || Object.values(data?.errors || {}).flat()[0] || 'Something went wrong');
+  if (!res.ok) {
+    const error = new Error(data?.message || Object.values(data?.errors || {}).flat()[0] || 'Something went wrong');
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 

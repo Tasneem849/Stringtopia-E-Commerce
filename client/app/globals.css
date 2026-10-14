@@ -392,3 +392,73 @@
   .checkout-promo-controls { grid-template-columns: 1fr; }
   .promo-admin-row { align-items: flex-start; flex-direction: column; }
 }
+
+@layer components {
+  .confirm-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    max-width: none;
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    color: var(--color-ink);
+    background: transparent;
+  }
+  .confirm-dialog::backdrop {
+    background: color-mix(in oklab, var(--color-ink) 52%, transparent);
+    backdrop-filter: blur(4px);
+  }
+  .confirm-dialog-card {
+    position: relative;
+    box-sizing: border-box;
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    padding: clamp(1.35rem, 5vw, 2rem);
+    border: 2px dashed color-mix(in oklab, var(--color-berry) 48%, white);
+    border-radius: 1.6rem;
+    background:
+      radial-gradient(circle at 94% 8%, color-mix(in oklab, var(--color-sky) 62%, white) 0 3.2rem, transparent 3.25rem),
+      linear-gradient(145deg, #fffaf4, white 56%, color-mix(in oklab, var(--color-pink) 16%, white));
+    box-shadow: 0 1.25rem 4rem color-mix(in oklab, var(--color-ink) 28%, transparent), 5px 6px 0 color-mix(in oklab, var(--color-sun) 72%, white);
+    text-align: center;
+  }
+  .confirm-dialog-card::before {
+    position: absolute;
+    inset: .45rem;
+    border: 1px solid color-mix(in oklab, var(--color-grass) 35%, transparent);
+    border-radius: 1.25rem;
+    content: '';
+    pointer-events: none;
+  }
+  .confirm-dialog-art {
+    position: relative;
+    display: grid;
+    width: 4rem;
+    height: 4rem;
+    margin: 0 auto .7rem;
+    place-items: center;
+    border: 2px solid white;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--color-pink) 38%, white);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-berry) 24%, transparent);
+    transform: rotate(-7deg);
+  }
+  .confirm-dialog-yarn { font-size: 2rem; line-height: 1; }
+  .confirm-dialog-sparkle { position: absolute; top: -.45rem; right: -.65rem; color: var(--color-grape); font-size: 1.35rem; }
+  .confirm-dialog-kicker { margin: 0 0 .35rem; color: var(--color-grape); font-size: .68rem; font-weight: 850; letter-spacing: .15em; }
+  .confirm-dialog-card h2 { margin: 0; font-size: clamp(1.5rem, 5vw, 1.9rem); }
+  .confirm-dialog-copy { max-width: 24rem; margin: .55rem auto 1.4rem; color: color-mix(in oklab, var(--color-ink) 76%, white); line-height: 1.55; overflow-wrap: anywhere; }
+  .confirm-dialog-copy strong { color: var(--color-berry); }
+  .confirm-dialog-error { margin: -.55rem 0 1rem; padding: .65rem .8rem; border: 1px solid color-mix(in oklab, var(--color-berry) 25%, white); border-radius: .8rem; background: color-mix(in oklab, var(--color-pink) 16%, white); color: var(--color-berry); font-size: .88rem; font-weight: 650; }
+  .confirm-dialog-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .7rem; }
+  .confirm-dialog-delete { border-color: var(--color-berry); background: var(--color-berry); color: white; }
+  .confirm-dialog-delete:hover { background: color-mix(in oklab, var(--color-berry) 84%, var(--color-ink)); color: white; }
+  .confirm-dialog-actions button:disabled { cursor: wait; opacity: .65; transform: none; }
+}
+
+@media (max-width: 480px) {
+  .confirm-dialog { width: calc(100vw - 1.25rem); }
+  .confirm-dialog-actions { flex-direction: column-reverse; }
+  .confirm-dialog-actions .btn { width: 100%; }
+}

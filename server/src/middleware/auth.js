@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 export function protect(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
@@ -11,8 +12,16 @@ export function protect(req, res, next) {
   }
 }
 
-export const adminOnly = (req, res, next) =>
-  req.user?.role === 'admin' ? next() : res.status(403).json({ message: 'Admins only' });
+export async function adminOnly(req, res, next) {
+  try {
+    const user = req.user?.id ? await User.findById(req.user.id).select('role').lean() : null;
+    if (!user) return res.status(401).json({ message: 'Admin session is no longer valid. Please log in again.' });
+    if (user.role !== 'admin') return res.status(403).json({ message: 'Admins only' });
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
 
 // For routes that also work for guests: attach the user if a valid token is sent, otherwise carry on as a guest.
 export function optionalAuth(req, res, next) {

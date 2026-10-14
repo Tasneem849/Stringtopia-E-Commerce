@@ -16,12 +16,19 @@ const schema = new mongoose.Schema({
   total: Number,
   promoCode: { type: String, trim: true, uppercase: true },
   discountAmount: { type: Number, default: 0, min: 0 },
+  promoUseHeld: { type: Boolean, default: false },
   paymentMethod: { type: String, enum: ['paymob', 'instapay', 'cod'], default: 'paymob', index: true },
   paymentStatus: { type: String, enum: ['unpaid', 'awaiting_confirmation', 'paid'], default: 'unpaid', index: true },
   instaPayReference: { type: String, trim: true },
+  paymobReference: { type: String, trim: true },
+  paymobOrderId: { type: String, trim: true },
+  paymobTransactionId: { type: String, trim: true },
+  checkoutIpHash: { type: String, select: false },
+  paymentReconciliationCheckedAt: Date,
+  paymentIssueReportedAt: Date,
   status: {
     type: String,
-    enum: ['requested', 'pending', 'approved', 'paid', 'shipped', 'declined', 'cancelled', 'expired'],
+    enum: ['requested', 'pending', 'approved', 'paid', 'out_for_delivery', 'shipped', 'declined', 'cancelled', 'expired'],
     default: 'pending',
     index: true,
   },
@@ -34,7 +41,7 @@ const schema = new mongoose.Schema({
   publicToken: { type: String, unique: true, sparse: true, default: () => crypto.randomBytes(16).toString('hex') },
   customer: { name: String, phone: String }, // who is paying; also the billing details sent to Paymob
   paymentAttempts: { type: Number, default: 0 },
-  shippingFee: { type: Number, default: 0 }, // cents; 0 for pickup
+  shippingFee: { type: Number, default: 0 }, // piasters; 0 for pickup
   delivery: {
     method: { type: String, enum: ['delivery', 'pickup'], default: 'delivery' },
     gift: Boolean, // sent to someone else
@@ -44,5 +51,8 @@ const schema = new mongoose.Schema({
     giftMessage: String,
   },
 }, { timestamps: true });
+
+schema.index({ status: 1, createdAt: 1 });
+schema.index({ checkoutIpHash: 1, status: 1 });
 
 export default mongoose.model('Order', schema);

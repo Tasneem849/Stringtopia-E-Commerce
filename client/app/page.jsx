@@ -23,10 +23,15 @@ export default async function Home({ searchParams }) {
     }
     delete apiParams[formKey];
   }
-  const [{ products, page, pages, total }, categories] = await Promise.all([
-    api(`/products?${clean(apiParams)}`),
-    api('/categories').catch(() => []),
+  const [catalogResult, categoryResult] = await Promise.allSettled([
+    api(`/products?${clean(apiParams)}`, { revalidate: 60, timeoutMs: 8000 }),
+    api('/categories', { revalidate: 60, timeoutMs: 8000 }),
   ]);
+  const catalogAvailable = catalogResult.status === 'fulfilled';
+  const { products, page, pages, total } = catalogAvailable
+    ? catalogResult.value
+    : { products: [], page: 1, pages: 1, total: 0 };
+  const categories = categoryResult.status === 'fulfilled' ? categoryResult.value : [];
 
   const initialFilters = {
     q: String(first(sp.q) || ''), category: String(first(sp.category) || ''), sort: String(first(sp.sort) || ''),
@@ -48,6 +53,7 @@ export default async function Home({ searchParams }) {
       <CatalogBrowser
         initialProducts={products} initialPage={page} initialPages={pages} initialTotal={total}
         initialFilters={initialFilters} categories={categories}
+        initialError={catalogAvailable ? '' : 'The catalog is taking a little longer to wake up. Please refresh in a moment.'}
       />
     </>
   );

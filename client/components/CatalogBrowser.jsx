@@ -6,11 +6,11 @@ import { api } from '@/lib/api';
 
 const pill = (on) => `pill cursor-pointer ${on ? 'pill-on' : ''}`;
 
-export default function CatalogBrowser({ initialProducts, initialPage, initialPages, initialTotal, initialFilters, categories }) {
+export default function CatalogBrowser({ initialProducts, initialPage, initialPages, initialTotal, initialFilters, categories, initialError = '' }) {
   const [filters, setFilters] = useState(initialFilters);
   const [results, setResults] = useState({ products: initialProducts, page: initialPage, pages: initialPages, total: initialTotal });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const requestId = useRef(0);
 
   async function refreshGallery(nextFilters, page = 1) {
@@ -126,11 +126,23 @@ export default function CatalogBrowser({ initialProducts, initialPage, initialPa
 
       {results.pages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-4 text-sm">
-          {results.page > 1 && <button type="button" className="catalog-pagination-link cursor-pointer border-0 bg-transparent p-0" onClick={() => void refreshGallery(filters, results.page - 1)} disabled={loading}>← Prev</button>}
+          {results.page > 1 && <a href={pageHref(filters, results.page - 1)} className="catalog-pagination-link cursor-pointer" onClick={(event) => { event.preventDefault(); if (!loading) void refreshGallery(filters, results.page - 1); }}>← Prev</a>}
           <span>Page {results.page} of {results.pages}</span>
-          {results.page < results.pages && <button type="button" className="catalog-pagination-link cursor-pointer" onClick={() => void refreshGallery(filters, results.page + 1)} disabled={loading}>Next →</button>}
+          {results.page < results.pages && <a href={pageHref(filters, results.page + 1)} className="catalog-pagination-link cursor-pointer" onClick={(event) => { event.preventDefault(); if (!loading) void refreshGallery(filters, results.page + 1); }}>Next →</a>}
         </div>
       )}
     </>
   );
+}
+
+function pageHref(filters, page) {
+  const params = new URLSearchParams();
+  if (filters.q.trim()) params.set('q', filters.q.trim());
+  if (filters.category.trim()) params.set('category', filters.category.trim());
+  if (filters.sort) params.set('sort', filters.sort);
+  if (filters.minPrice !== '') params.set('minPrice', filters.minPrice);
+  if (filters.maxPrice !== '') params.set('maxPrice', filters.maxPrice);
+  if (filters.inStock) params.set('inStock', 'true');
+  if (page > 1) params.set('page', String(page));
+  return `/?${params.toString()}`;
 }

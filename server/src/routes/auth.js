@@ -5,17 +5,27 @@ import { OAuth2Client } from 'google-auth-library';
 import { z } from 'zod';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 const googleClient = new OAuth2Client();
-const sign = (u) => jwt.sign({ id: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const sign = (u) => jwt.sign({ id: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: u.role === 'admin' ? '30m' : '7d' });
 const pub = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role });
+const registerLimit = rateLimit({ windowMs: 15 * 60e3, max: 5 });
+const loginLimit = rateLimit({
+  windowMs: 15 * 60e3,
+  max: 8,
+  keyGenerator: (req) => [
+    `login-ip:${req.ip || 'unknown'}`,
+    `login-email:${String(req.body?.email || '').trim().toLowerCase() || 'missing'}`,
+  ],
+});
 
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimit, async (req, res) => {
   const data = z.object({
     name: z.string().min(2).optional(), // email + password is enough to sign up
     email: z.string().email(),
-    password: z.string().min(8),
+    password: z.string().min(8).max(72).refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be 72 bytes or fewer.'),
   }).parse(req.body);
   if (await User.exists({ email: data.email.toLowerCase() }))
     return res.status(409).json({ message: 'Email already registered' });
@@ -23,8 +33,8 @@ router.post('/register', async (req, res) => {
   res.status(201).json({ token: sign(user), user: pub(user) });
 });
 
-router.post('/login', async (req, res) => {
-  const { email, password } = z.object({ email: z.string().email(), password: z.string() }).parse(req.body);
+router.post('/login', loginLimit, async (req, res) => {
+  const { email, password } = z.object({ email: z.string().email(), password: z.string().max(72).refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be 72 bytes or fewer.') }).parse(req.body);
   const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
   if (!user?.password || !(await bcrypt.compare(password, user.password)))
     return res.status(401).json({ message: 'Wrong email or password' });
@@ -52,15 +62,14 @@ router.post('/google', async (req, res) => {
   let user = await User.findOne({ googleId: payload.sub }).select('+googleId');
   let created = false;
   if (!user) {
-    user = await User.findOne({ email }).select('+googleId');
+    user = await User.findOne({ email }).select('+googleId +password');
     if (user) {
       if (user.googleId && user.googleId !== payload.sub) {
         return res.status(409).json({ message: 'This email is linked to a different Google account. Please sign in with email and password.' });
       }
-      const googleOwnsEmail = email.endsWith('@gmail.com') || Boolean(payload.hd);
-      if (!googleOwnsEmail) {
-        return res.status(409).json({ message: 'An account already uses this email. Please sign in with email and password.' });
-      }
+      // A verified Google identity proves control of this email. Remove any unverified
+      // password registration before linking so its creator cannot retain access.
+      if (user.password) user.password = undefined;
       user.googleId = payload.sub;
       await user.save();
     } else {

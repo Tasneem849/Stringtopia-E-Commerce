@@ -23,7 +23,15 @@ export async function listProducts(req, res) {
   const limit = Math.min(+req.query.limit || 12, 50);
   const page = Math.max(+req.query.page || 1, 1);
   const filter = {};
-  if (q) filter.$text = { $search: String(q) };
+  if (q) {
+    const query = String(q).trim();
+    if (/[\u0600-\u06FF]/u.test(query)) {
+      const pattern = escapeRegExp(query);
+      filter.$or = [{ name: { $regex: pattern, $options: 'i' } }, { description: { $regex: pattern, $options: 'i' } }];
+    } else {
+      filter.$text = { $search: query };
+    }
+  }
   const normalizedCategory = String(category ?? '').trim();
   if (normalizedCategory) {
     filter.category = { $regex: `^${escapeRegExp(normalizedCategory)}$`, $options: 'i' };

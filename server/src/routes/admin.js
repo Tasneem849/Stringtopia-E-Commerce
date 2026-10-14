@@ -32,12 +32,16 @@ const promoCodeInputSchema = z.discriminatedUnion('discountType', [
     discountType: z.literal('percentage'),
     discountValue: z.number().int().min(1).max(100),
     active: z.boolean().default(true),
+    startsAt: z.coerce.date().optional(), expiresAt: z.coerce.date().optional(),
+    minimumOrder: z.number().int().min(0).default(0), usageLimit: z.number().int().min(1).optional(),
   }),
   z.object({
     code: z.string().trim().min(3).max(24).regex(/^[A-Za-z0-9_-]+$/),
     discountType: z.literal('fixed'),
     discountValue: z.number().int().min(1).max(100000000),
     active: z.boolean().default(true),
+    startsAt: z.coerce.date().optional(), expiresAt: z.coerce.date().optional(),
+    minimumOrder: z.number().int().min(0).default(0), usageLimit: z.number().int().min(1).optional(),
   }),
 ]);
 
@@ -46,7 +50,13 @@ router.use(protect, adminOnly);
 
 router.get('/orders', async (req, res) => {
   const filter = req.query.status ? { status: String(req.query.status) } : {};
-  res.json(await Order.find(filter).populate('user', 'name email').sort('-createdAt'));
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 50);
+  const requestedPage = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+  const total = await Order.countDocuments(filter);
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(requestedPage, pages);
+  const orders = await Order.find(filter).populate('user', 'name email').sort('-createdAt').skip((page - 1) * limit).limit(limit);
+  res.json({ orders, page, pages, total });
 });
 
 router.post('/orders/:id/approve', async (req, res) => {
@@ -70,10 +80,28 @@ router.post('/orders/:id/decline', async (req, res) => {
   res.json(order);
 });
 
+router.patch('/orders/:id/cancel', async (req, res) => {
+  const order = await Order.findOneAndUpdate({
+    _id: req.params.id,
+    $or: [
+      { status: { $in: ['requested', 'approved'] } },
+      { status: 'pending', paymentMethod: { $in: ['instapay', 'cod'] } },
+    ],
+  }, { status: 'cancelled', promoUseHeld: false });
+  if (!order) return res.status(409).json({ message: 'This order is no longer eligible for admin cancellation.' });
+  if (order.stockHeld) await Promise.all(order.items.map((item) => Product.updateOne({ _id: item.product }, { $inc: { stock: item.qty } })));
+  if (order.promoUseHeld && order.promoCode) {
+    await PromoCode.updateOne({ code: order.promoCode, redemptionCount: { $gt: 0 } }, { $inc: { redemptionCount: -1 } });
+  }
+  const cancelled = await Order.findById(order._id);
+  mail.cancelled(cancelled);
+  res.json(cancelled);
+});
+
 router.patch('/orders/:id/confirm-payment', async (req, res) => {
   const order = await Order.findOneAndUpdate(
     { _id: req.params.id, status: 'pending', paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation' },
-    { status: 'paid', paymentStatus: 'paid' }, { new: true },
+    { status: 'paid', paymentStatus: 'paid', promoUseHeld: false }, { new: true },
   );
   if (!order) return res.status(409).json({ message: 'This InstaPay order is no longer awaiting confirmation' });
   mail.paid(order);
@@ -82,11 +110,21 @@ router.patch('/orders/:id/confirm-payment', async (req, res) => {
 
 router.patch('/orders/:id/complete-cod', async (req, res) => {
   const order = await Order.findOneAndUpdate(
-    { _id: req.params.id, status: 'pending', paymentMethod: 'cod', paymentStatus: 'unpaid' },
-    { status: 'shipped', paymentStatus: 'paid' }, { new: true },
+    { _id: req.params.id, status: { $in: ['pending', 'out_for_delivery'] }, paymentMethod: 'cod', paymentStatus: 'unpaid' },
+    { status: 'shipped', paymentStatus: 'paid', promoUseHeld: false }, { new: true },
   );
   if (!order) return res.status(409).json({ message: 'This cash-on-delivery order is no longer open' });
   mail.codCompleted(order);
+  res.json(order);
+});
+
+router.patch('/orders/:id/out-for-delivery', async (req, res) => {
+  const order = await Order.findOneAndUpdate(
+    { _id: req.params.id, status: 'pending', paymentMethod: 'cod', 'delivery.method': 'delivery' },
+    { status: 'out_for_delivery' }, { new: true },
+  );
+  if (!order) return res.status(409).json({ message: 'This delivery order is no longer awaiting dispatch.' });
+  mail.outForDelivery(order);
   res.json(order);
 });
 
@@ -160,6 +198,8 @@ router.delete('/categories/:id', async (req, res) => {
 
 router.post('/promo-codes', async (req, res) => {
   const input = promoCodeInputSchema.parse(req.body);
+  if (input.startsAt && input.expiresAt && input.expiresAt <= input.startsAt)
+    return res.status(400).json({ message: 'The expiry date must be later than the start date.' });
   try {
     res.status(201).json(await PromoCode.create({ ...input, code: input.code.toUpperCase() }));
   } catch (error) {
@@ -189,8 +229,16 @@ router.post('/products', async (req, res) => {
     return res.status(400).json({ message: 'Sale price must be lower than regular price.' });
   res.status(201).json(await Product.create(input));
 });
+router.patch('/products/:id/stock', async (req, res) => {
+  const { delta } = z.object({ delta: z.number().int().min(-10000).max(10000).refine((value) => value !== 0, 'Enter a non-zero stock adjustment.') }).parse(req.body ?? {});
+  const filter = { _id: req.params.id, ...(delta < 0 ? { stock: { $gte: -delta } } : {}) };
+  const product = await Product.findOneAndUpdate(filter, { $inc: { stock: delta } }, { new: true, runValidators: true });
+  if (product) return res.json(product);
+  if (!(await Product.exists({ _id: req.params.id }))) return res.status(404).json({ message: 'Product not found' });
+  return res.status(409).json({ message: 'Stock cannot be reduced below zero.' });
+});
 router.put('/products/:id', async (req, res) => {
-  const updates = productSchema.partial().parse(req.body);
+  const updates = productSchema.partial().omit({ stock: true }).parse(req.body);
   if (updates.category) {
     const category = await Category.findOne({ key: categoryKey(updates.category) });
     if (!category) return res.status(400).json({ message: 'Choose a category from the category list.' });

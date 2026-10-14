@@ -10,7 +10,9 @@ export default function Requests() {
   const [orders, setOrders] = useState(null);
   const [text, setText] = useState({});
   const [err, setErr] = useState('');
-  const load = () => api('/admin/orders?status=requested', { token }).then(setOrders).catch((e) => setErr(e.message));
+  const load = () => api('/admin/orders?status=requested', { token })
+    .then((result) => setOrders(Array.isArray(result?.orders) ? result.orders : []))
+    .catch((e) => setErr(e.message));
   useEffect(() => { if (token) load(); }, [token]);
 
   async function act(id, action, body) {

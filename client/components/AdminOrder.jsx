@@ -7,7 +7,7 @@ export default function AdminOrder({ o, children }) {
   return (
     <div className="space-y-1 card text-sm">
       <div className="flex justify-between">
-        <strong className="capitalize">{o.status}</strong>
+        <strong className="capitalize">{o.status === 'out_for_delivery' ? 'Out for delivery' : o.status}</strong>
         <span className="text-stone-500">{new Date(o.createdAt).toLocaleString()}</span>
       </div>
       <p>{o.user ? `${o.user.name} (${o.user.email})` : `Guest ${o.email || ''}`}{o.customer?.phone ? `, ${o.customer.phone}` : ''}</p>

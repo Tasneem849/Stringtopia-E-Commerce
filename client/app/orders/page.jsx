@@ -7,6 +7,7 @@ import { useStore } from '@/components/Providers';
 const LABEL = {
   requested: 'Waiting for approval', approved: 'Approved: ready to pay', pending: 'Awaiting payment',
   paid: 'Paid', shipped: 'Shipped', declined: 'Declined', cancelled: 'Cancelled', expired: 'Expired',
+  out_for_delivery: 'Out for delivery',
 };
 
 const CANCEL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;

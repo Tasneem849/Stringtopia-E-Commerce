@@ -6,20 +6,20 @@ Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admi
 1. `npm install`
 2. `cp .env.example .env` and fill in values (MongoDB Atlas URI, Paymob test keys, and InstaPay account/WhatsApp details if enabled)
 3. `npm run seed` (creates admin + sample products), then `npm run dev`
-4. Payments locally: Paymob must reach your API, so expose it with a tunnel (e.g. `ngrok http 5000`) and set `API_URL` to that https address
+4. Payments locally: Paymob must reach your API, so expose it with a tunnel (e.g. `ngrok http 5000`) and set `API_URL` to that https address. Configure `PAYMOB_API_KEY` too so the expiry sweep and thank-you page can verify delayed callbacks.
 
 ## Endpoints
 - `POST /api/auth/register | login | google`, `GET /api/auth/me`
 - `GET /api/favorites`, `POST /api/favorites/:productId`, `DELETE /api/favorites/:productId` (authenticated)
 - `GET /api/products` (`q, category, min, max, sort, page, limit`), `GET /api/products/:slug`
 - `GET /api/admin/products`, `POST/PUT/DELETE /api/admin/products` (admin only)
-- `POST /api/orders/checkout` (guests welcome; accepts `paymentMethod: paymob | instapay | cod`), `GET /api/orders/by-ref/:token`, `POST /api/orders/pay/:token`, `POST /api/orders/by-ref/:token/instapay-reference`, `GET /api/orders/mine`
-- `GET /api/admin/orders?status=pending`, `PATCH /api/admin/orders/:id/confirm-payment`, `PATCH /api/admin/orders/:id/complete-cod`, `PATCH /api/admin/orders/:id/ship` (admin only)
+- `POST /api/orders/checkout` (guests welcome; accepts `paymentMethod: paymob | instapay | cod`), `GET /api/orders/by-ref/:token`, `POST /api/orders/by-ref/:token/reconcile`, `POST /api/orders/pay/:token`, `POST /api/orders/by-ref/:token/instapay-reference`, `GET /api/orders/mine`
+- `GET /api/admin/orders?status=pending&page=1&limit=20`, `PATCH /api/admin/orders/:id/confirm-payment`, `PATCH /api/admin/orders/:id/complete-cod`, `PATCH /api/admin/orders/:id/out-for-delivery`, `PATCH /api/admin/orders/:id/cancel`, `PATCH /api/admin/orders/:id/ship` (admin only)
 
 All `/api/admin/*` endpoints require a Bearer token for an account whose server-side role is `admin`. Registration and Google sign-in create customer accounts only.
 
 ## Roadmap
-Next.js storefront, admin dashboard, Cloudinary uploads, reviews, order emails, tests, deploy.
+Next hardening work: email verification/recovery, a checkout CAPTCHA after its provider and data flow are approved, a shared rate limiter for multiple API instances, and broader Mongo-backed checkout/auth tests. Sentry and production monitoring need project credentials before they can be enabled.
 
 ## Reservation flow (only when stock can't cover the quantity)
 If stock covers the quantity, use `POST /api/orders/checkout` (holds stock while the customer completes Paymob or InstaPay, or until a cash-on-delivery order is fulfilled).
@@ -31,7 +31,7 @@ Unanswered requests expire after `REQUEST_TTL_DAYS`. Reservations never touch st
 
 ## Delivery
 Every order has a `delivery` choice: `pickup` (free, collected at `PICKUP_ADDRESS`) or `delivery`
-(`DELIVERY_FEE` cents, to the customer or, with `gift: true`, to someone else with an optional gift message).
+(`DELIVERY_FEE` piasters, to the customer or, with `gift: true`, to someone else with an optional gift message).
 The fee is added server-side to the order total for every payment method. For pickup orders, "ship" in the admin API means "ready for pickup".
 
 ## Emails
