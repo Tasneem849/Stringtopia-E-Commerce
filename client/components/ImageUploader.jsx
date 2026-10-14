@@ -67,7 +67,7 @@ export default function ImageUploader({ images, onChange }) {
       </label>
       <div className="flex gap-2">
         <input
-          type="url" placeholder="Or paste an image link (https://...)" value={link} className="field w-full"
+          type="url" placeholder="Or paste an image link (https://...)" value={link} className="field w-lvh"
           onChange={(e) => setLink(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } }}
         />

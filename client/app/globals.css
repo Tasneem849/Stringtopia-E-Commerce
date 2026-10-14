@@ -358,3 +358,37 @@
   .catalog-pagination-link { transition: color .18s ease; }
   .catalog-pagination-link:hover { color: var(--color-grape); }
 }
+
+@layer components {
+  .checkout-promo {
+    display: grid;
+    gap: .75rem;
+    padding: .9rem;
+    border: 1px solid color-mix(in oklab, var(--color-grass) 40%, transparent);
+    border-radius: 1rem;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--color-pink) 22%, white), color-mix(in oklab, var(--color-sky) 28%, white));
+  }
+  .checkout-promo-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .checkout-promo-heading h3 { margin: 0; color: var(--color-ink); font-size: .98rem; font-weight: 800; }
+  .checkout-promo-heading p { margin: .12rem 0 0; color: color-mix(in oklab, var(--color-ink) 66%, white); font-size: .8rem; }
+  .checkout-promo-heading > span { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; background: color-mix(in oklab, var(--color-pink) 45%, white); color: var(--color-berry); }
+  .checkout-promo-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .55rem; }
+  .checkout-promo-controls .field { min-width: 0; text-transform: uppercase; letter-spacing: .04em; }
+  .checkout-promo-hint { margin: 0; color: color-mix(in oklab, var(--color-ink) 62%, white); font-size: .76rem; line-height: 1.4; }
+  .checkout-promo-feedback { margin: 0; font-size: .83rem; font-weight: 700; line-height: 1.45; }
+  .checkout-promo-feedback-success { color: var(--color-grass); }
+  .checkout-promo-feedback-error { color: var(--color-berry); }
+  .promo-admin-form { max-width: 44rem; }
+  .promo-admin-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .promo-admin-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
+  .promo-admin-code { color: var(--color-berry); letter-spacing: .05em; }
+  .promo-admin-status { display: inline-flex; align-items: center; padding: .18rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 800; }
+  .promo-admin-status-active { background: color-mix(in oklab, var(--color-grass) 18%, white); color: var(--color-grass); }
+  .promo-admin-status-inactive { background: color-mix(in oklab, var(--color-ink) 10%, white); color: color-mix(in oklab, var(--color-ink) 70%, white); }
+  .promo-admin-row p { margin: .3rem 0 0; color: color-mix(in oklab, var(--color-ink) 68%, white); font-size: .88rem; }
+}
+
+@media (max-width: 480px) {
+  .checkout-promo-controls { grid-template-columns: 1fr; }
+  .promo-admin-row { align-items: flex-start; flex-direction: column; }
+}

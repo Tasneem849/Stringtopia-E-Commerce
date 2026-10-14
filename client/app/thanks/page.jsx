@@ -76,6 +76,7 @@ export default function Thanks() {
         {paid ? 'Thank you! 🧶' : order.status === 'expired' ? 'This order has expired' : order.status === 'cancelled' ? 'This order was cancelled' : isCashOnDelivery && order.status === 'pending' ? 'Your order is placed' : isInstaPay && order.status === 'pending' ? 'Complete your InstaPay transfer' : failed ? 'The payment did not go through' : 'Confirming your payment...'}
       </h1>
       {order.items.map((item, index) => <p key={index}>{item.qty} × {item.name}</p>)}
+      {order.promoCode && order.discountAmount > 0 && <p className="checkout-promo-feedback checkout-promo-feedback-success">Promo {order.promoCode}: saved {money(order.discountAmount)}</p>}
       <p className="font-medium">Total: {money(order.total)}</p>
       {order.method === 'pickup' && config.pickupAddress && <p className="text-sm">Pick up at: {config.pickupAddress}</p>}
 

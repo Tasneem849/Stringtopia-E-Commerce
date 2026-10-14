@@ -2,16 +2,21 @@ import { Router } from 'express';
 import { z } from 'zod';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import PromoCode from '../models/PromoCode.js';
 import User from '../models/User.js';
 import { mail } from '../email.js';
 import { createCheckout, isValidHmac } from '../paymob.js';
 import { feeFor, sumTotal, toEgPhone } from '../pricing.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const router = Router();
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const AWAITING_PAYMENT = ['pending', 'approved'];
 const PAY_HOURS = 23; // how long an approved reservation stays payable
+const CANCEL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const promoValidationLimit = rateLimit({ windowMs: 10 * 60e3, max: 20 });
+const promoCodeSchema = z.string().trim().min(3).max(24).regex(/^[A-Za-z0-9_-]+$/);
 const itemsSchema = z.array(z.object({ productId: z.string(), qty: z.number().int().min(1).max(20) })).min(1);
 const deliverySchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('pickup') }), // free: collected from the business address
@@ -38,8 +43,19 @@ async function buildLines(items) {
   return items.map(({ productId, qty }) => {
     const p = products.find((x) => x.id === productId);
     if (!p) throw fail(404, 'Product not found');
-    return { product: p._id, name: p.name, price: p.price, qty }; // price from DB, never the client
+    const price = Number.isFinite(p.salePrice) && p.salePrice >= 0 && p.salePrice < p.price ? p.salePrice : p.price;
+    return { product: p._id, name: p.name, price, qty }; // effective price from DB, never the client
   });
+}
+
+async function resolvePromo(code, subtotal) {
+  const normalizedCode = code.trim().toUpperCase();
+  const promo = await PromoCode.findOne({ code: normalizedCode, active: true }).lean();
+  if (!promo) throw fail(400, 'That promo code is invalid or inactive.');
+  const discountAmount = promo.discountType === 'percentage'
+    ? Math.min(subtotal, Math.round(subtotal * promo.discountValue / 100))
+    : Math.min(subtotal, promo.discountValue);
+  return { code: promo.code, discountAmount, subtotal };
 }
 
 const restock = (lines) =>
@@ -81,21 +97,33 @@ async function startPayment(order) {
   return createCheckout(order, paymentAttempts);
 }
 
+router.post('/promo/validate', promoValidationLimit, async (req, res) => {
+  const { code, items } = z.object({ code: promoCodeSchema, items: itemsSchema }).parse(req.body);
+  const lines = await buildLines(items);
+  const promo = await resolvePromo(code, sumTotal(lines));
+  res.json(promo);
+});
+
 // ---- direct checkout (guests welcome): hold stock, then send the customer to Paymob ----
 router.post('/checkout', optionalAuth, async (req, res) => {
-  const { items, delivery, customer, paymentMethod } = z.object({
+  const { items, delivery, customer, paymentMethod, promoCode } = z.object({
     items: itemsSchema, delivery: deliverySchema, customer: customerSchema.extend({ email: z.string().email() }),
-    paymentMethod: paymentMethodSchema,
+    paymentMethod: paymentMethodSchema, promoCode: promoCodeSchema.optional(),
   }).parse(req.body);
   if (paymentMethod === 'instapay' && !process.env.INSTAPAY_ADDRESS)
     throw fail(503, 'InstaPay payment details are not configured yet');
   const lines = await buildLines(items);
+  const subtotal = sumTotal(lines);
+  const promo = promoCode ? await resolvePromo(promoCode, subtotal) : null;
+  const discountAmount = promo?.discountAmount || 0;
+  const shippingFee = feeFor(delivery);
   await holdStock(lines);
   let order;
   try {
     order = await Order.create({
       user: req.user?.id, email: customer.email.toLowerCase(), customer: { name: customer.name, phone: toEgPhone(customer.phone) },
-      items: lines, delivery, shippingFee: feeFor(delivery), total: sumTotal(lines) + feeFor(delivery), stockHeld: true,
+      items: lines, delivery, shippingFee, promoCode: promo?.code, discountAmount,
+      total: subtotal - discountAmount + shippingFee, stockHeld: true,
       paymentMethod, paymentStatus: paymentMethod === 'instapay' ? 'awaiting_confirmation' : 'unpaid',
     });
     if (paymentMethod === 'paymob') return res.json({ url: await startPayment(order) });
@@ -133,9 +161,16 @@ router.post('/reserve', protect, async (req, res) => {
 });
 
 router.post('/:id/cancel', protect, async (req, res) => {
-  const order = await closeOrder(
-    { _id: req.params.id, user: req.user.id, status: { $in: ['requested', ...AWAITING_PAYMENT] } }, 'cancelled');
-  if (!order) return res.status(409).json({ message: "This order can't be cancelled" });
+  const cutoff = new Date(Date.now() - CANCEL_WINDOW_MS);
+  const order = await closeOrder({
+    _id: req.params.id,
+    user: req.user.id,
+    status: { $in: ['requested', ...AWAITING_PAYMENT] },
+    createdAt: { $gt: cutoff },
+  }, 'cancelled');
+  if (!order) return res.status(409).json({
+    message: "This order can't be cancelled. Cancellation is only available for eligible orders within 3 days of placing them.",
+  });
   res.json(order);
 });
 
@@ -206,6 +241,7 @@ router.get('/by-ref/:token', async (req, res) => {
   if (!o) return res.status(404).json({ message: 'Order not found' });
   res.json({
     status: o.status, total: o.total, method: o.delivery?.method,
+    promoCode: o.promoCode || '', discountAmount: o.discountAmount || 0,
     paymentMethod: o.paymentMethod || 'paymob', paymentStatus: o.paymentStatus || 'unpaid',
     paymentReference: String(o.id).toUpperCase(), instaPayReference: o.instaPayReference || '',
     items: o.items.map(({ name, qty }) => ({ name, qty })),

@@ -2,6 +2,10 @@ export const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api
 export const money = (cents) =>
   new Intl.NumberFormat('en-EG', { style: 'currency', currency: process.env.NEXT_PUBLIC_CURRENCY || 'EGP' }).format(cents / 100);
 
+export const hasSalePrice = (product) =>
+  Number.isFinite(product?.salePrice) && Number.isFinite(product?.price) && product.salePrice >= 0 && product.salePrice < product.price;
+export const effectivePrice = (product) => hasSalePrice(product) ? product.salePrice : product.price;
+
 export async function api(path, { token, method = 'GET', body } = {}) {
   const res = await fetch(API + path, {
     method,

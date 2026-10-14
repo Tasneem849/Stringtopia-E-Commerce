@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
-import { api, money, img } from '@/lib/api';
+import { api, img } from '@/lib/api';
 import Gallery from '@/components/Gallery';
 import BuyBox from '@/components/BuyBox';
 import FavoriteButton from '@/components/FavoriteButton';
+import ProductPrice from '@/components/ProductPrice';
 
 const get = (slug) => api(`/products/${slug}`).catch(() => null);
 
@@ -26,7 +27,7 @@ export default async function ProductPage({ params }) {
           <h1 className="text-4xl font-bold">{p.name}</h1>
           <FavoriteButton product={p} />
         </div>
-        <p className="my-2 text-xl text-yarn">{money(p.price)}</p>
+        <p className="my-2 text-xl text-yarn"><ProductPrice product={p} /></p>
         <p className="mb-4 text-stone-600">{p.description}</p>
         <BuyBox product={p} />
       </div>

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import CheckoutSteps from '@/components/CheckoutSteps';
 import ContactFields from '@/components/ContactFields';
 import DeliveryForm from '@/components/DeliveryForm';
 import { useStore } from '@/components/Providers';
-import { api, money } from '@/lib/api';
+import { api, effectivePrice, money } from '@/lib/api';
+import ProductPrice from '@/components/ProductPrice';
 
 export default function Checkout() {
   const { cart, config, token, ready, clearCart } = useStore();
@@ -15,13 +16,50 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState('paymob');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState(null);
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoFeedback, setPromoFeedback] = useState(null);
+  const cartSubtotal = cart.reduce((sum, item) => sum + effectivePrice(item) * item.qty, 0);
+  const cartKey = cart.map((item) => [item.productId, item.qty].join(':')).join('|') + ':' + cartSubtotal;
+  const currentPromo = appliedPromo?.cartKey === cartKey ? appliedPromo : null;
+  const subtotal = currentPromo?.subtotal ?? cartSubtotal;
+  const discountAmount = currentPromo?.discountAmount || 0;
   const deliveryFee = delivery.method === 'pickup' ? 0 : Number(config.deliveryFee) || 0;
-  const total = subtotal + deliveryFee;
+  const total = subtotal - discountAmount + deliveryFee;
+
+  useEffect(() => {
+    setAppliedPromo(null);
+    setPromoFeedback(null);
+  }, [cartKey]);
+
+  async function applyPromo() {
+    const code = promoInput.trim().toUpperCase();
+    if (!code || promoBusy || busy || !cart.length) {
+      if (!code) setPromoFeedback({ type: 'error', text: 'Enter a promo code first.' });
+      return;
+    }
+    setPromoBusy(true);
+    setPromoFeedback(null);
+    try {
+      const result = await api('/orders/promo/validate', {
+        method: 'POST',
+        body: { code, items: cart.map(({ productId, qty }) => ({ productId, qty })) },
+      });
+      setAppliedPromo({ ...result, cartKey });
+      setPromoInput(result.code);
+      setPromoFeedback({ type: 'success', text: result.code + ' applied — you save ' + money(result.discountAmount) + '.' });
+    } catch (promoError) {
+      setAppliedPromo(null);
+      setPromoFeedback({ type: 'error', text: promoError.message || 'That promo code could not be applied.' });
+    } finally {
+      setPromoBusy(false);
+    }
+  }
 
   async function placeOrder(event) {
     event.preventDefault();
-    if (busy || !cart.length) return;
+    if (busy || promoBusy || !cart.length) return;
     setBusy(true);
     setError('');
     try {
@@ -33,6 +71,7 @@ export default function Checkout() {
           delivery,
           customer,
           paymentMethod,
+          promoCode: currentPromo?.code,
         },
       });
       if (result.url) {
@@ -126,12 +165,74 @@ export default function Checkout() {
           <ul className="checkout-summary-items">
             {cart.map((item) => (
               <li className="checkout-summary-item" key={item.productId}>
-                <span><strong>{item.name}</strong><small>Qty {item.qty} × {money(item.price)}</small></span>
-                <strong>{money(item.price * item.qty)}</strong>
+                <span><strong>{item.name}</strong><small>Qty {item.qty} × <ProductPrice product={item} /></small></span>
+                <strong>{money(effectivePrice(item) * item.qty)}</strong>
               </li>
             ))}
           </ul>
+          <div className="checkout-promo" aria-labelledby="checkout-promo-title">
+            <div className="checkout-promo-heading">
+              <div>
+                <h3 id="checkout-promo-title">A little something extra</h3>
+                <p>Have a promo code? Add it before placing your order.</p>
+              </div>
+              <span aria-hidden="true">✦</span>
+            </div>
+            <div className="checkout-promo-controls">
+              <label className="sr-only" htmlFor="checkout-promo-code">Promo code</label>
+              <input
+                id="checkout-promo-code"
+                className="field"
+                value={promoInput}
+                onChange={(event) => {
+                  const nextCode = event.target.value.toUpperCase();
+                  setPromoInput(nextCode);
+                  if (appliedPromo && nextCode.trim() !== appliedPromo.code) setAppliedPromo(null);
+                  setPromoFeedback(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applyPromo();
+                  }
+                }}
+                maxLength={24}
+                autoComplete="off"
+                autoCapitalize="characters"
+                placeholder="e.g. LOVELY10"
+                aria-describedby="checkout-promo-hint"
+              />
+              {currentPromo ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={promoBusy || busy}
+                  onClick={() => {
+                    setAppliedPromo(null);
+                    setPromoInput('');
+                    setPromoFeedback(null);
+                  }}
+                >
+                  Remove
+                </button>
+              ) : (
+                <button type="button" className="btn btn-mint" disabled={promoBusy || busy} onClick={applyPromo}>
+                  {promoBusy ? 'Checking…' : 'Apply code'}
+                </button>
+              )}
+            </div>
+            <p id="checkout-promo-hint" className="checkout-promo-hint">Promo discounts apply to your items before delivery.</p>
+            {promoFeedback && (
+              <p
+                className={'checkout-promo-feedback checkout-promo-feedback-' + promoFeedback.type}
+                role={promoFeedback.type === 'error' ? 'alert' : 'status'}
+              >
+                {promoFeedback.text}
+              </p>
+            )}
+          </div>
           <div className="checkout-summary-row"><span>Subtotal</span><span>{money(subtotal)}</span></div>
+          {discountAmount > 0 && <div className="checkout-summary-row"><span>Promo ({currentPromo.code})</span><span>-{money(discountAmount)}</span></div>}
           <div className="checkout-summary-row"><span>Delivery</span><span>{deliveryFee ? money(deliveryFee) : 'Free'}</span></div>
           <div className="checkout-summary-row checkout-summary-total"><strong>Total</strong><strong>{money(total)}</strong></div>
           <p className="checkout-summary-note">
@@ -142,7 +243,7 @@ export default function Checkout() {
                 : delivery.method === 'pickup' ? 'Pickup has no delivery fee.' : 'Delivery fee is confirmed with your order.'}
           </p>
           {error && <p className="checkout-error" role="alert">{error}</p>}
-          <button type="submit" className="btn btn-primary checkout-submit" disabled={busy || (paymentMethod === 'instapay' && !config.instaPayAddress)}>
+          <button type="submit" className="btn btn-primary checkout-submit" disabled={busy || promoBusy || (paymentMethod === 'instapay' && !config.instaPayAddress)}>
             {busy ? (paymentMethod === 'paymob' ? 'Preparing Paymob checkout…' : 'Placing your order…') : paymentMethod === 'paymob' ? 'Continue to Paymob' : 'Place order'} <span aria-hidden="true">→</span>
           </button>
           <p className="checkout-guest-note">Guest checkout is welcome. No account needed.</p>

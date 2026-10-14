@@ -3,6 +3,7 @@ import { Gaegu, Figtree } from 'next/font/google';
 import Providers from '@/components/Providers';
 import Header from '@/components/Header';
 import BackgroundAudioPlayer from '@/components/BackgroundAudioPlayer';
+import WorkshopReminder from '@/components/WorkshopReminder';
 
 // Hand-drawn display face to echo the pen lettering in the logo, clean sans for reading
 const display = Gaegu({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-display' });
@@ -19,6 +20,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-screen">
         <Providers>
           <Header />
+          <WorkshopReminder />
           <BackgroundAudioPlayer />
           <main className="mx-auto max-w-5xl p-4 md:p-6">{children}</main>
           <footer className="mt-12 border-t-2 border-dashed border-ink/20 p-6 text-center text-sm">

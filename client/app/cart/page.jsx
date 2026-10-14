@@ -1,12 +1,13 @@
 'use client';
 import Link from 'next/link';
-import { img, money } from '@/lib/api';
+import { effectivePrice, img, money } from '@/lib/api';
+import ProductPrice from '@/components/ProductPrice';
 import { useStore } from '@/components/Providers';
 import CheckoutSteps from '@/components/CheckoutSteps';
 
 export default function Cart() {
   const { cart, setQty, removeItem, clearCart, ready } = useStore();
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const subtotal = cart.reduce((sum, item) => sum + effectivePrice(item) * item.qty, 0);
 
   if (!ready) return <p role="status">Loading your cart…</p>;
 
@@ -73,7 +74,7 @@ export default function Cart() {
                 </div>
                 <div className="min-w-0">
                   <Link href={`/products/${item.slug}`} className="font-bold hover:underline">{item.name}</Link>
-                  <p className="mt-1 text-sm text-stone-500">{money(item.price)} each</p>
+                  <p className="mt-1 text-sm text-stone-500"><ProductPrice product={item} /> each</p>
                 </div>
               </div>
               <div className="cart-item-controls">
@@ -83,7 +84,7 @@ export default function Cart() {
                   type="number" min={1} max={20} value={item.qty} className="field w-20"
                   onChange={(event) => setQty(item.productId, Math.max(1, Math.min(20, +event.target.value || 1)))}
                 />
-                <strong className="cart-item-total">{money(item.price * item.qty)}</strong>
+                <strong className="cart-item-total">{money(effectivePrice(item) * item.qty)}</strong>
                 <button type="button" onClick={() => removeItem(item.productId)} className="cart-remove-button">Remove</button>
               </div>
             </article>

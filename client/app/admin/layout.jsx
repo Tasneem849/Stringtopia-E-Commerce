@@ -13,6 +13,7 @@ export default function AdminLayout({ children }) {
         <Link className="nav-link" href="/admin">Reservation requests</Link>
         <Link className="nav-link" href="/admin/orders">Orders</Link>
         <Link className="nav-link" href="/admin/products">Products</Link>
+        <Link className="nav-link" href="/admin/promos">Promo codes</Link>
         <Link className="nav-link" href="/admin/audio">Background audio</Link>
       </nav>
       {children}

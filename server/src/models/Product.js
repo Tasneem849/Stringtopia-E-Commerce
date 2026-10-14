@@ -4,7 +4,12 @@ const schema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   slug: { type: String, unique: true },
   description: { type: String, default: '' },
-  price: { type: Number, required: true, min: 0 }, // in cents
+  price: { type: Number, required: true, min: 0 }, // regular price in cents
+  salePrice: {
+    type: Number,
+    min: 0,
+    validate: { validator(value) { return value == null || value < this.price; }, message: 'Sale price must be lower than regular price' },
+  }, // optional discounted price in cents
   images: [String],
   category: { type: String, index: true },
   colors: [String],

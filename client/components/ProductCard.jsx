@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { money } from '@/lib/api';
+import ProductPrice from './ProductPrice';
 import AddToCartButton from './AddToCartButton';
 import FavoriteButton from './FavoriteButton';
 import Thumb from './Thumb';
@@ -12,7 +12,7 @@ export default function ProductCard({ product }) {
         <Thumb src={product.images?.[0]} />
         <h2 className="mt-2 text-xl font-bold">{product.name}</h2>
         <p className="text-sm text-stone-600">
-          {money(product.price)}
+          <ProductPrice product={product} />
           {product.stock === 0 && <span className="chip">Sold out: reserve it</span>}
         </p>
       </Link>

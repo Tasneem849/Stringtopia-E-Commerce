@@ -20,6 +20,11 @@ export default function BuyBox({ product: p }) {
   const [customer, setCustomer] = useState(null);
   const field = (k) => ({ value: creds[k], onChange: (e) => setCreds({ ...creds, [k]: e.target.value }) });
 
+  function buyNow() {
+    addToCart(p, qty);
+    router.push('/checkout');
+  }
+
   async function reserve(e) {
     e.preventDefault();
     try {
@@ -45,9 +50,14 @@ export default function BuyBox({ product: p }) {
         onChange={(e) => setQty(Math.max(1, Math.min(20, +e.target.value || 1)))}
       />
       {qty <= p.stock ? (
-        <button onClick={() => { addToCart(p, qty); setMsg('Added to cart'); }} className="btn btn-primary ml-3">
-          Add to cart
-        </button>
+        <div className="inline-flex flex-wrap items-center gap-3 ml-3">
+          <button onClick={() => { addToCart(p, qty); setMsg('Added to cart'); }} className="btn btn-primary">
+            Add to cart
+          </button>
+          <button type="button" onClick={buyNow} className="btn btn-ghost text-sm px-4 py-2">
+            Buy now
+          </button>
+        </div>
       ) : (
         <form onSubmit={reserve} className="card space-y-2 bg-sun/25 text-sm">
           <p>

@@ -14,6 +14,7 @@ export default function AdminOrder({ o, children }) {
       <p><strong>Payment:</strong> {o.paymentMethod === 'cod' ? 'Cash on Delivery' : o.paymentMethod === 'instapay' ? 'InstaPay' : 'Paymob'}{o.paymentStatus === 'awaiting_confirmation' ? ' · awaiting confirmation' : o.paymentStatus === 'unpaid' ? ' · unpaid' : ''}</p>
       {o.instaPayReference && <p><strong>InstaPay transfer reference:</strong> {o.instaPayReference}</p>}
       {o.items.map((i) => <p key={i._id}>{i.qty} × {i.name}</p>)}
+      {o.promoCode && o.discountAmount > 0 && <p><strong>Promo {o.promoCode}:</strong> saved {money(o.discountAmount)}</p>}
       <p className="font-medium">
         {money(o.total)}{o.shippingFee ? ` (includes ${money(o.shippingFee)} delivery)` : ''}
       </p>

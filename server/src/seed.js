@@ -2,6 +2,7 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import User from './models/User.js';
 import Product from './models/Product.js';
+import { syncCategoriesFromProducts } from './categoryCatalog.js';
 
 await mongoose.connect(process.env.MONGO_URI);
 if (!(await User.exists({ role: 'admin' }))) {
@@ -41,6 +42,8 @@ for (const product of products) {
   existingNames.add(key);
   added += 1;
 }
+
+await syncCategoriesFromProducts();
 
 console.log(`Seeded admin if needed and added ${added} missing products.`);
 await mongoose.disconnect();

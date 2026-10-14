@@ -76,6 +76,30 @@ export default function Providers({ children }) {
     return () => { active = false; };
   }, [auth.token, ready]);
 
+  useEffect(() => {
+    if (!ready) return undefined;
+    const legacyItems = cart.filter((item) => item.slug && !Object.prototype.hasOwnProperty.call(item, 'salePrice'));
+    if (!legacyItems.length) return undefined;
+    let active = true;
+    Promise.all(legacyItems.map(async (item) => {
+      try {
+        const product = await api(`/products/${encodeURIComponent(item.slug)}`);
+        return { productId: String(item.productId), price: product.price, salePrice: product.salePrice ?? null };
+      } catch {
+        return null;
+      }
+    })).then((results) => {
+      if (!active) return;
+      const latestPrices = new Map(results.filter(Boolean).map((item) => [item.productId, item]));
+      if (!latestPrices.size) return;
+      setCart((items) => items.map((item) => {
+        const latest = latestPrices.get(String(item.productId));
+        return latest ? { ...item, price: latest.price, salePrice: latest.salePrice } : item;
+      }));
+    });
+    return () => { active = false; };
+  }, [cart, ready]);
+
   const refreshConfig = async () => {
     const nextConfig = await api('/config');
     setConfig(nextConfig);
@@ -92,9 +116,9 @@ export default function Providers({ children }) {
       if (found) {
         if (found.qty >= limit) return c;
         const nextQty = Math.min(limit, found.qty + amount);
-        return c.map((i) => (i === found ? { ...i, image: i.image || p.images?.[0] || '', qty: nextQty } : i));
+        return c.map((i) => (i === found ? { ...i, name: p.name, image: i.image || p.images?.[0] || '', price: p.price, salePrice: p.salePrice ?? null, qty: nextQty } : i));
       }
-      return [...c, { productId: p._id, slug: p.slug, name: p.name, price: p.price, image: p.images?.[0] || '', qty: Math.min(limit, amount) }];
+      return [...c, { productId: p._id, slug: p.slug, name: p.name, price: p.price, salePrice: p.salePrice ?? null, image: p.images?.[0] || '', qty: Math.min(limit, amount) }];
     });
   };
   const setQty = (id, qty) => setCart((c) => c.map((i) => (i.productId === id ? { ...i, qty } : i)));

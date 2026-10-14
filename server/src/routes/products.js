@@ -4,11 +4,12 @@ import Product from '../models/Product.js';
 
 const router = Router();
 export const productSchema = z.object({
-  name: z.string().min(2),
+  name: z.string().trim().min(2),
   description: z.string().optional(),
   price: z.number().int().min(0),
+  salePrice: z.number().int().min(0).nullable().optional(),
   images: z.array(z.string().url().startsWith('https://')).max(6).optional(),
-  category: z.string().optional(),
+  category: z.string().trim().min(1).max(80).optional(),
   colors: z.array(z.string()).optional(),
   stock: z.number().int().min(0).optional(),
 });
@@ -27,14 +28,28 @@ export async function listProducts(req, res) {
   if (normalizedCategory) {
     filter.category = { $regex: `^${escapeRegExp(normalizedCategory)}$`, $options: 'i' };
   }
-  if (min || max) filter.price = { ...(min && { $gte: +min }), ...(max && { $lte: +max }) };
+  const effectivePrice = { $ifNull: ['$salePrice', '$price'] };
+  const priceToUse = { $cond: [{ $lt: [effectivePrice, '$price'] }, effectivePrice, '$price'] };
+  if (min || max) {
+    const bounds = [];
+    if (min) bounds.push({ $gte: [priceToUse, +min] });
+    if (max) bounds.push({ $lte: [priceToUse, +max] });
+    filter.$expr = { $and: bounds };
+  }
   if (String(inStock).toLowerCase() === 'true') filter.stock = { $gt: 0 };
   const sortBy = ['price', '-price', '-createdAt'].includes(sort) ? sort : '-createdAt';
 
-  const [products, total] = await Promise.all([
-    Product.find(filter).sort(sortBy).skip((page - 1) * limit).limit(limit),
-    Product.countDocuments(filter),
-  ]);
+  const productQuery = ['price', '-price'].includes(sort)
+    ? Product.aggregate([
+      { $match: filter },
+      { $addFields: { _effectivePrice: priceToUse } },
+      { $sort: { _effectivePrice: sort === 'price' ? 1 : -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+      { $project: { _effectivePrice: 0 } },
+    ])
+    : Product.find(filter).sort(sortBy).skip((page - 1) * limit).limit(limit);
+  const [products, total] = await Promise.all([productQuery, Product.countDocuments(filter)]);
   res.json({ products, page, pages: Math.ceil(total / limit), total });
 }
 

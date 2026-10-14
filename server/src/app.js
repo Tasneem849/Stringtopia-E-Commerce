@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import mongoose from 'mongoose';
 import { rateLimit } from './middleware/rateLimit.js';
 import authRoutes from './routes/auth.js';
+import categoryRoutes from './routes/categories.js';
 import productRoutes from './routes/products.js';
 import favoriteRoutes from './routes/favorites.js';
 import orderRoutes, { webhook } from './routes/orders.js';
@@ -44,6 +45,7 @@ app.get('/api/config', async (req, res) => {
 });
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60e3, max: 100 }), authRoutes);
 app.use('/api/favorites', favoriteRoutes);
+app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
