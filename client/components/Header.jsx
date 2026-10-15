@@ -16,6 +16,7 @@ export default function Header() {
           {user?.role === 'admin' && <Link href="/admin" className="nav-link">Admin</Link>}
           {user ? (
             <>
+              {user.role === 'customer' && <Link href="/account" className="nav-link">Account</Link>}
               <Link href="/favorites" className="nav-link">Favorites</Link>
               <Link href="/orders" className="nav-link">My orders</Link>
               <button onClick={logout} className="nav-link cursor-pointer">Log out</button>

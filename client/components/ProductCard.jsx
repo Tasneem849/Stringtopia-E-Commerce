@@ -17,8 +17,17 @@ export default function ProductCard({ product }) {
         </p>
       </Link>
       <FavoriteButton product={product} overlay />
-      <div className={`product-card-actions${product.variants?.length ? ' product-card-actions-with-variants' : ''}`}>
-        <AddToCartButton product={product} />
+      <div className="product-card-actions">
+        {product.variants?.length ? (
+          <Link
+            href={`/products/${product.slug}`}
+            className="product-add-button"
+            aria-label={`Open ${product.name} to choose its options`}
+          >
+            <span className="product-add-icon" aria-hidden="true">+</span>
+            <span>Choose options</span>
+          </Link>
+        ) : <AddToCartButton product={product} />}
       </div>
     </article>
   );

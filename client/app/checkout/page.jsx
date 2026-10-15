@@ -246,6 +246,9 @@ export default function Checkout() {
           </p>
           {needsVariant && <p className="checkout-error" role="alert">Choose each product’s option in your cart before placing the order. <Link href="/cart" className="underline">Return to cart</Link>.</p>}
           {error && <p className="checkout-error" role="alert">{error}</p>}
+          <p className="mb-2 text-center text-xs leading-relaxed text-stone-600">
+            Your details are handled as described in our <Link href="/privacy" className="underline underline-offset-2">Privacy policy</Link>. Orders are subject to our <Link href="/terms" className="underline underline-offset-2">Terms of sale</Link>.
+          </p>
           <button type="submit" className="btn btn-primary checkout-submit" disabled={busy || promoBusy || needsVariant || (paymentMethod === 'instapay' && !config.instaPayAddress)}>
             {busy ? (paymentMethod === 'paymob' ? 'Preparing Paymob checkout…' : 'Placing your order…') : paymentMethod === 'paymob' ? 'Continue to Paymob' : 'Place order'} <span aria-hidden="true">→</span>
           </button>

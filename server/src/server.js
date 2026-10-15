@@ -2,6 +2,7 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import User from './models/User.js';
 import { sweep } from './routes/orders.js';
+import { sweepAccountDeletions } from './accountDeletion.js';
 import { app } from './app.js';
 
 // Fail fast with a clear message instead of failing later in strange ways
@@ -18,7 +19,9 @@ if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && !(await User.exists
     .catch((e) => console.error('Could not create the admin account:', e.message));
 }
 
-const sweepTimer = setInterval(() => sweep().catch(console.error), 10 * 60 * 1000);
+const runSweeps = () => Promise.all([sweep(), sweepAccountDeletions()]).catch(console.error);
+void runSweeps();
+const sweepTimer = setInterval(runSweeps, 10 * 60 * 1000);
 const server = app.listen(process.env.PORT || 5000, () => console.log('Stringtopia API running'));
 
 let shuttingDown = false;

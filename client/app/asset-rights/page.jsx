@@ -18,7 +18,7 @@ export default function AssetRightsPage() {
 
       <section className="space-y-2">
         <h2 className="text-xl font-semibold">Brand and creative assets</h2>
-        <p>Stringtopia’s name, logo, illustrations, product photos, product descriptions, and other original creative assets are protected. Do not copy, modify, publish, or reuse them without written permission from the applicable rights holder. Third-party materials remain the property of their respective owners.</p>
+        <p>Stringtopia’s name, logo, illustrations, product photos, product descriptions, and other original creative assets are protected. You may download and share Stringtopia product photos for non-commercial purposes when you clearly credit Stringtopia and leave the images unaltered. Do not claim the photos as your own, remove their attribution, or use them commercially without written permission from the applicable rights holder. This limited permission does not transfer ownership. Third-party materials remain the property of their respective owners.</p>
       </section>
 
       <p className="text-sm text-stone-600">Public access to this website or repository does not grant permission to use its source code or creative assets.</p>

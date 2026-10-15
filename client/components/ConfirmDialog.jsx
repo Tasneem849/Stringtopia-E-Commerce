@@ -19,6 +19,7 @@ export default function ConfirmDialog({
   inputMaxLength,
   onInputChange,
   confirmStyle = 'danger',
+  kicker = 'STRINGTOPIA · ADMIN',
   busy = false,
   error = '',
   onConfirm,
@@ -62,7 +63,7 @@ export default function ConfirmDialog({
           <span className="confirm-dialog-yarn">🧶</span>
           <span className="confirm-dialog-sparkle">✦</span>
         </div>
-        <p className="confirm-dialog-kicker">STRINGTOPIA · ADMIN</p>
+        <p className="confirm-dialog-kicker">{kicker}</p>
         <h2 id="confirm-dialog-title">{title}</h2>
         <p id="confirm-dialog-description" className="confirm-dialog-copy">
           {description || <>You’re about to remove <strong>{itemName}</strong> {itemType === 'product' ? 'from your shop' : 'from your category list'}. This can’t be undone.</>}

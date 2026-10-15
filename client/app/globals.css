@@ -294,8 +294,6 @@
 @layer components {
   .product-card { position: relative; }
   .product-card-actions { display: flex; justify-content: flex-end; margin-top: .8rem; }
-  .product-card-actions-with-variants { flex-direction: column; align-items: stretch; }
-  .product-card-actions-with-variants .product-add-button { align-self: flex-end; }
   .product-add-button {
     display: inline-flex; min-height: 2.55rem; align-items: center; justify-content: center; gap: .45rem;
     padding: .35rem .85rem .35rem .45rem; border: 1px solid color-mix(in oklab, var(--color-berry) 45%, transparent);

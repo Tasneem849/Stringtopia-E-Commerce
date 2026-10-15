@@ -28,6 +28,10 @@ export default function RootLayout({ children }) {
             <p>Handmade with love by Stringtopia.</p>
             <p className="mt-2 text-stone-600">© {new Date().getFullYear()} Stringtopia. All rights reserved.{' '}
               <Link href="/asset-rights" className="font-medium text-yarn underline underline-offset-2 hover:text-ink">Asset &amp; usage rights</Link>
+              {' · '}
+              <Link href="/privacy" className="font-medium text-yarn underline underline-offset-2 hover:text-ink">Privacy</Link>
+              {' · '}
+              <Link href="/terms" className="font-medium text-yarn underline underline-offset-2 hover:text-ink">Terms</Link>
             </p>
             <nav aria-label="Stringtopia social media" className="mt-4 flex justify-center gap-3">
               <a

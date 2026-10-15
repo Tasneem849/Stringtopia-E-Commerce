@@ -21,6 +21,9 @@ export default async function sitemap() {
   }
   return [
     { url: base, changeFrequency: 'daily', priority: 1 },
+    { url: `${base}/privacy`, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${base}/terms`, changeFrequency: 'yearly', priority: 0.2 },
+    { url: `${base}/asset-rights`, changeFrequency: 'yearly', priority: 0.2 },
     ...products.filter((product) => product.slug).map((product) => ({ url: `${base}/products/${encodeURIComponent(product.slug)}`, changeFrequency: 'weekly', priority: 0.7 })),
   ];
 }

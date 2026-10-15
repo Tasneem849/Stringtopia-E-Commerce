@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 // Open orders can end as declined, cancelled or expired; held stock is released
 const schema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }, // empty for guest orders
+  accountDeletionDataPending: { type: Boolean, default: false, index: true }, // scrub personal details after an account's open order/refund is resolved
   email: String,
   items: [{
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
