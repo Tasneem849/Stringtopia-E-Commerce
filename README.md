@@ -14,6 +14,11 @@ A full-stack online shop for handmade crochet, built for the Egyptian market (EG
 Next.js (App Router) and Tailwind on the front end. Node, Express and MongoDB (Mongoose) on the back end.
 Deployed on Vercel, Render and MongoDB Atlas.
 
+## Usage and asset rights
+You may use the high-level project structure—such as the folder organization and the separation between the client and server—as a reference for your own project. This permission does not grant permission to copy or redistribute this repository's source code.
+
+Stringtopia's name, logo, illustrations, product photography, and other original creative assets are protected and may not be copied, modified, published, or reused without written permission from the applicable rights holder. Third-party materials remain the property of their respective owners. Viewing or cloning this public repository does not grant rights to those assets. See [ASSET-RIGHTS.md](ASSET-RIGHTS.md).
+
 ## Engineering notes
 - **No overselling:** stock is held with one atomic update (`stock >= qty` and the decrement in the same operation) and released if the order is cancelled or expires.
 - **Payments are confirmed server-to-server:** Paymob's callback is verified with an HMAC, checked against the order total, and claimed with an atomic status change, so retries can't process an order twice. Payments that arrive after an order expired are still honoured.
