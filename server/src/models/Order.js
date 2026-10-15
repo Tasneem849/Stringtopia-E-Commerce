@@ -10,6 +10,8 @@ const schema = new mongoose.Schema({
   items: [{
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
     name: String,
+    variantLabel: String,
+    variant: String,
     price: Number, // snapshot at purchase time
     unitCost: { type: Number, select: false, validate: { validator: Number.isSafeInteger, message: 'Unit cost must be a whole number of piasters' } }, // admin-only cost snapshot in piasters
     qty: Number,

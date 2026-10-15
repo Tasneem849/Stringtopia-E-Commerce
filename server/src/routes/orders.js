@@ -30,7 +30,9 @@ const reconciliationLimit = rateLimit({
   keyGenerator: (req) => [`reconcile-ip:${req.ip || 'unknown'}`, `reconcile-order:${req.params.token || 'unknown'}`],
 });
 const promoCodeSchema = z.string().trim().min(3).max(24).regex(/^[A-Za-z0-9_-]+$/);
-const itemsSchema = z.array(z.object({ productId: z.string(), qty: z.number().int().min(1).max(20) })).min(1).max(30);
+const itemsSchema = z.array(z.object({
+  productId: z.string(), qty: z.number().int().min(1).max(20), variant: z.string().trim().min(1).max(80).optional(),
+})).min(1).max(30);
 const deliverySchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('pickup') }), // free: collected from the business address
   z.object({
@@ -53,11 +55,18 @@ const paymentMethodSchema = z.enum(['paymob', 'instapay', 'cod']).default('paymo
 
 async function buildLines(items) {
   const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } }).select('+unitCost');
-  return items.map(({ productId, qty }) => {
+  return items.map(({ productId, qty, variant }) => {
     const p = products.find((x) => x.id === productId);
     if (!p) throw fail(404, 'Product not found');
+    const choices = p.variants || [];
+    if (choices.length && !variant) throw fail(400, `Choose a ${p.variantLabel || 'variant'} for ${p.name}.`);
+    if (variant && !choices.includes(variant)) throw fail(400, `That ${p.variantLabel || 'variant'} is not available for ${p.name}.`);
     const price = Number.isFinite(p.salePrice) && p.salePrice >= 0 && p.salePrice < p.price ? p.salePrice : p.price;
-    return { product: p._id, name: p.name, price, ...(Number.isFinite(p.unitCost) ? { unitCost: p.unitCost } : {}), qty }; // snapshots from DB, never the client
+    return {
+      product: p._id, name: p.name,
+      ...(variant ? { variantLabel: p.variantLabel || 'Option', variant } : {}),
+      price, ...(Number.isFinite(p.unitCost) ? { unitCost: p.unitCost } : {}), qty,
+    }; // snapshots from DB, never the client
   });
 }
 
@@ -231,7 +240,7 @@ router.post('/reserve', protect, async (req, res) => {
   mail.newRequest(order);
   res.status(201).json({
     ...order.toObject(),
-    items: order.items.map(({ product, name, price, qty }) => ({ product, name, price, qty })),
+    items: order.items.map(({ product, name, price, qty, variantLabel, variant }) => ({ product, name, price, qty, variantLabel, variant })),
   });
 });
 
@@ -487,7 +496,7 @@ router.get('/by-ref/:token', async (req, res) => {
     promoCode: o.promoCode || '', discountAmount: o.discountAmount || 0,
     paymentMethod: o.paymentMethod || 'paymob', paymentStatus: o.paymentStatus || 'unpaid',
     paymentReference: String(o.id).toUpperCase(), instaPayReference: o.instaPayReference || '',
-    items: o.items.map(({ name, qty }) => ({ name, qty })),
+    items: o.items.map(({ name, qty, variantLabel, variant }) => ({ name, qty, variantLabel, variant })),
   });
 });
 

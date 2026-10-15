@@ -12,6 +12,8 @@ export const productSchema = z.object({
   images: z.array(z.string().url().startsWith('https://')).max(6).optional(),
   category: z.string().trim().min(1).max(80).optional(),
   colors: z.array(z.string()).optional(),
+  variantLabel: z.string().trim().max(60).optional(),
+  variants: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   stock: z.number().int().min(0).optional(),
 });
 

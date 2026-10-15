@@ -21,7 +21,12 @@ export default function AdminOrder({ o, children }) {
               `Automatic refund failed${o.refundError ? ` · ${o.refundError}` : ''}`}
       </p>}
       {o.instaPayReference && <p><strong>InstaPay transfer reference:</strong> {o.instaPayReference}</p>}
-      {o.items.map((i) => <p key={i._id}>{i.qty} × {i.name}</p>)}
+      {o.items.map((i) => <div key={i._id}>
+        <p>{i.qty} × {i.name}</p>
+        {i.variant && <p className="ml-4 mt-1 inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900">
+          Prepare: {i.variantLabel || 'Option'} — {i.variant}
+        </p>}
+      </div>)}
       {o.promoCode && o.discountAmount > 0 && <p><strong>Promo {o.promoCode}:</strong> saved {money(o.discountAmount)}</p>}
       <p className="font-medium">
         {money(o.total)}{o.shippingFee ? ` (includes ${money(o.shippingFee)} delivery)` : ''}

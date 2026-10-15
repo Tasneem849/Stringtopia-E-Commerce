@@ -17,7 +17,7 @@ export default function ProductCard({ product }) {
         </p>
       </Link>
       <FavoriteButton product={product} overlay />
-      <div className="product-card-actions">
+      <div className={`product-card-actions${product.variants?.length ? ' product-card-actions-with-variants' : ''}`}>
         <AddToCartButton product={product} />
       </div>
     </article>

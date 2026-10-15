@@ -9,7 +9,7 @@ export default function Header() {
   return (
     <header className="border-b-2 border-dashed border-ink/30 bg-sky">
       <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 p-3">
-        <Link href="/" className="logo"><BrandArtwork src="/bear.png" alt="" className="ball" />Stringtopia</Link>
+        <Link href="/" className="logo"><BrandArtwork src="/icon.png" alt="" className="ball" />Stringtopia</Link>
         <div className="yarn-cycle flex flex-wrap items-center gap-1 text-sm">
           {/* key={count}: the number pops each time the cart changes */}
           <Link href="/cart" className="nav-link">Cart <span key={count} className={count ? 'pop' : ''}>({count})</span></Link>

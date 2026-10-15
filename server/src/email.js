@@ -36,7 +36,7 @@ const shell = (heading, inner, cta) => `
 </div>`;
 
 const items = (o) =>
-  `<ul>${o.items.map((i) => `<li>${i.qty} × ${esc(i.name)}</li>`).join('')}</ul><p><b>Total: ${money(o.total)}</b></p>`;
+  `<ul>${o.items.map((i) => `<li>${i.qty} × ${esc(i.name)}${i.variant ? ` (${esc(i.variantLabel || 'Option')}: ${esc(i.variant)})` : ''}</li>`).join('')}</ul><p><b>Total: ${money(o.total)}</b></p>`;
 
 const where = (o) => {
   const d = o.delivery || {};

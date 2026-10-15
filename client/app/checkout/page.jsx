@@ -5,7 +5,7 @@ import Link from 'next/link';
 import CheckoutSteps from '@/components/CheckoutSteps';
 import ContactFields from '@/components/ContactFields';
 import DeliveryForm from '@/components/DeliveryForm';
-import { useStore } from '@/components/Providers';
+import { cartLineKey, useStore } from '@/components/Providers';
 import { api, effectivePrice, money } from '@/lib/api';
 import ProductPrice from '@/components/ProductPrice';
 
@@ -21,7 +21,8 @@ export default function Checkout() {
   const [promoBusy, setPromoBusy] = useState(false);
   const [promoFeedback, setPromoFeedback] = useState(null);
   const cartSubtotal = cart.reduce((sum, item) => sum + effectivePrice(item) * item.qty, 0);
-  const cartKey = cart.map((item) => [item.productId, item.qty].join(':')).join('|') + ':' + cartSubtotal;
+  const cartKey = cart.map((item) => [cartLineKey(item), item.qty].join(':')).join('|') + ':' + cartSubtotal;
+  const needsVariant = cart.some((item) => item.variants?.length && !item.variants.includes(item.variant));
   const currentPromo = appliedPromo?.cartKey === cartKey ? appliedPromo : null;
   const subtotal = currentPromo?.subtotal ?? cartSubtotal;
   const discountAmount = currentPromo?.discountAmount || 0;
@@ -35,8 +36,9 @@ export default function Checkout() {
 
   async function applyPromo() {
     const code = promoInput.trim().toUpperCase();
-    if (!code || promoBusy || busy || !cart.length) {
+    if (!code || promoBusy || busy || !cart.length || needsVariant) {
       if (!code) setPromoFeedback({ type: 'error', text: 'Enter a promo code first.' });
+      else if (needsVariant) setPromoFeedback({ type: 'error', text: 'Choose each product option in your cart first.' });
       return;
     }
     setPromoBusy(true);
@@ -44,7 +46,7 @@ export default function Checkout() {
     try {
       const result = await api('/orders/promo/validate', {
         method: 'POST',
-        body: { code, items: cart.map(({ productId, qty }) => ({ productId, qty })) },
+        body: { code, items: cart.map(({ productId, qty, variant }) => ({ productId, qty, ...(variant ? { variant } : {}) })) },
       });
       setAppliedPromo({ ...result, cartKey });
       setPromoInput(result.code);
@@ -59,7 +61,7 @@ export default function Checkout() {
 
   async function placeOrder(event) {
     event.preventDefault();
-    if (busy || promoBusy || !cart.length) return;
+    if (busy || promoBusy || !cart.length || needsVariant) return;
     setBusy(true);
     setError('');
     try {
@@ -67,7 +69,7 @@ export default function Checkout() {
         token,
         method: 'POST',
         body: {
-          items: cart.map(({ productId, qty }) => ({ productId, qty })),
+          items: cart.map(({ productId, qty, variant }) => ({ productId, qty, ...(variant ? { variant } : {}) })),
           delivery,
           customer,
           paymentMethod,
@@ -164,8 +166,8 @@ export default function Checkout() {
           <h2 id="checkout-summary-title" className="text-xl font-bold">Your order</h2>
           <ul className="checkout-summary-items">
             {cart.map((item) => (
-              <li className="checkout-summary-item" key={item.productId}>
-                <span><strong>{item.name}</strong><small>Qty {item.qty} × <ProductPrice product={item} /></small></span>
+              <li className="checkout-summary-item" key={cartLineKey(item)}>
+                <span><strong>{item.name}</strong>{item.variant && <small className="font-semibold text-rose-900">Selected {item.variantLabel || 'option'}: {item.variant}</small>}<small>Qty {item.qty} × <ProductPrice product={item} /></small></span>
                 <strong>{money(effectivePrice(item) * item.qty)}</strong>
               </li>
             ))}
@@ -242,8 +244,9 @@ export default function Checkout() {
                 ? 'We will hold your items while we confirm your InstaPay transfer.'
                 : delivery.method === 'pickup' ? 'Pickup has no delivery fee.' : 'Delivery fee is confirmed with your order.'}
           </p>
+          {needsVariant && <p className="checkout-error" role="alert">Choose each product’s option in your cart before placing the order. <Link href="/cart" className="underline">Return to cart</Link>.</p>}
           {error && <p className="checkout-error" role="alert">{error}</p>}
-          <button type="submit" className="btn btn-primary checkout-submit" disabled={busy || promoBusy || (paymentMethod === 'instapay' && !config.instaPayAddress)}>
+          <button type="submit" className="btn btn-primary checkout-submit" disabled={busy || promoBusy || needsVariant || (paymentMethod === 'instapay' && !config.instaPayAddress)}>
             {busy ? (paymentMethod === 'paymob' ? 'Preparing Paymob checkout…' : 'Placing your order…') : paymentMethod === 'paymob' ? 'Continue to Paymob' : 'Place order'} <span aria-hidden="true">→</span>
           </button>
           <p className="checkout-guest-note">Guest checkout is welcome. No account needed.</p>

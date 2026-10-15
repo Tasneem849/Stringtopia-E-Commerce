@@ -81,7 +81,12 @@ export default function Orders() {
               <strong>{o.delivery?.method === 'pickup' && o.status === 'shipped' && paymentMethod !== 'cod' ? 'Ready for pickup' : label}</strong>
               <span className="text-sm text-stone-500">{new Date(o.createdAt).toLocaleDateString()}</span>
             </div>
-            {o.items.map((item) => <p key={item._id} className="text-sm">{item.qty} × {item.name}</p>)}
+            {o.items.map((item) => <div key={item._id} className="text-sm">
+              <p>{item.qty} × {item.name}</p>
+              {item.variant && <p className="ml-4 mt-1 inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900">
+                Your selection: {item.variantLabel || 'Option'} — {item.variant}
+              </p>}
+            </div>)}
             {o.delivery?.method && (
               <p className="text-sm text-stone-600">
                 {o.delivery.method === 'pickup'

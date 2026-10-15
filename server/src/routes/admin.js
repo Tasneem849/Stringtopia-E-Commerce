@@ -20,7 +20,10 @@ const manualOrderSchema = z.object({
   source: z.enum(['whatsapp', 'phone']),
   customer: z.object({ name: z.string().trim().min(2).max(80), phone: z.string().trim().min(6).max(30) }),
   email: z.string().trim().email().optional(),
-  items: z.array(z.object({ productId: z.string().regex(/^[a-f\d]{24}$/i), qty: z.number().int().min(1).max(1000) })).min(1).max(40),
+  items: z.array(z.object({
+    productId: z.string().regex(/^[a-f\d]{24}$/i), qty: z.number().int().min(1).max(1000),
+    variant: z.string().trim().min(1).max(80).optional(),
+  })).min(1).max(40),
   delivery: z.discriminatedUnion('method', [
     z.object({ method: z.literal('pickup') }),
     z.object({
@@ -52,6 +55,14 @@ const productNamePattern = (name) => {
   return new RegExp(`^\\s*${words.join('\\s+')}\\s*$`, 'i');
 };
 const duplicateProductMessage = (product) => `A product named "${product.name}" already exists. Edit the existing product instead.`;
+const variantSetupError = (input, current = {}) => {
+  const variants = Object.prototype.hasOwnProperty.call(input, 'variants') ? input.variants : current.variants;
+  const label = Object.prototype.hasOwnProperty.call(input, 'variantLabel') ? input.variantLabel : current.variantLabel;
+  if (variants?.length && !label?.trim()) return 'Add a label for the variant choices.';
+  if (variants?.length && new Set(variants.map((value) => value.toLocaleLowerCase())).size !== variants.length)
+    return 'Variant choices must be unique.';
+  return '';
+};
 const cloudinaryAudioUrl = z.string().url().refine((value) => {
   const parsed = new URL(value);
   return parsed.protocol === 'https:' && parsed.hostname === 'res.cloudinary.com' && parsed.pathname.includes('/video/upload/');
@@ -99,11 +110,24 @@ router.post('/orders', async (req, res) => {
   const byId = new Map(products.map((product) => [product.id, product]));
   if (byId.size !== productIds.length) return res.status(404).json({ message: 'One or more products could not be found.' });
 
-  const lines = productIds.map((productId) => {
+  const lines = input.items.map(({ productId, qty, variant }) => {
     const product = byId.get(productId);
-    const qty = quantities.get(productId);
+    if (product.variants?.length && !variant) {
+      const error = new Error(`Choose a ${product.variantLabel || 'variant'} for ${product.name}.`);
+      error.status = 400;
+      throw error;
+    }
+    if (variant && !(product.variants || []).includes(variant)) {
+      const error = new Error(`That ${product.variantLabel || 'variant'} is not available for ${product.name}.`);
+      error.status = 400;
+      throw error;
+    }
     const price = Number.isFinite(product.salePrice) && product.salePrice >= 0 && product.salePrice < product.price ? product.salePrice : product.price;
-    return { product: product._id, name: product.name, price, ...(Number.isFinite(product.unitCost) ? { unitCost: product.unitCost } : {}), qty };
+    return {
+      product: product._id, name: product.name,
+      ...(variant ? { variantLabel: product.variantLabel || 'Option', variant } : {}),
+      price, ...(Number.isFinite(product.unitCost) ? { unitCost: product.unitCost } : {}), qty,
+    };
   });
   const subtotal = lines.reduce((sum, item) => sum + item.price * item.qty, 0);
   if (input.discountAmount > subtotal) return res.status(400).json({ message: 'Discount cannot be greater than the products subtotal.' });
@@ -442,6 +466,8 @@ router.patch('/promo-codes/:id/active', async (req, res) => {
 router.get('/products', (req, res) => listProducts(req, res, { includeUnitCost: true }));
 router.post('/products', async (req, res) => {
   const input = productSchema.parse(req.body);
+  const variantError = variantSetupError(input);
+  if (variantError) return res.status(400).json({ message: variantError });
   const duplicate = await Product.findOne({ name: productNamePattern(input.name) }).select('name');
   if (duplicate) return res.status(409).json({ message: duplicateProductMessage(duplicate) });
   if (input.category) {
@@ -470,6 +496,8 @@ router.put('/products/:id', async (req, res) => {
   }
   const product = await Product.findById(req.params.id);
   if (!product) return res.status(404).json({ message: 'Product not found' });
+  const variantError = variantSetupError(updates, product);
+  if (variantError) return res.status(400).json({ message: variantError });
   if (updates.name && normalizeProductName(updates.name) !== normalizeProductName(product.name)) {
     const duplicate = await Product.findOne({
       _id: { $ne: product._id },

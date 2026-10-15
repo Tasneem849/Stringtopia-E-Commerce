@@ -14,6 +14,8 @@ const schema = new mongoose.Schema({
   images: [String],
   category: { type: String, index: true },
   colors: [String],
+  variantLabel: { type: String, trim: true, maxlength: 60, default: '' },
+  variants: [{ type: String, trim: true, maxlength: 80 }],
   stock: { type: Number, default: 1, min: 0 },
 }, { timestamps: true });
 

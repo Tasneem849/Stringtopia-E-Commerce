@@ -6,7 +6,7 @@ import { useStore } from '@/components/Providers';
 import ImageUploader from '@/components/ImageUploader';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
-const BLANK = { id: null, name: '', price: '', salePrice: '', unitCost: '', stock: '1', category: '', colors: '', images: [], description: '' };
+const BLANK = { id: null, name: '', price: '', salePrice: '', unitCost: '', stock: '1', category: '', colors: '', hasVariants: false, variantKind: 'Color', variantLabel: '', variants: '', images: [], description: '' };
 const input = 'field w-full';
 
 export default function AdminProducts() {
@@ -131,11 +131,23 @@ export default function AdminProducts() {
       setErr('Enter a valid product cost, or leave it blank if unknown.');
       return;
     }
+    const variants = [...new Map(f.variants.split(',').map((value) => value.trim()).filter(Boolean)
+      .map((value) => [value.toLocaleLowerCase(), value])).values()];
+    if (f.hasVariants && variants.length === 0) {
+      setErr('Add at least one selectable variant choice, such as Sage, Bear, or Panda.');
+      return;
+    }
+    if (f.hasVariants && f.variantKind === 'custom' && !f.variantLabel.trim()) {
+      setErr('Add a label describing the custom variant choices.');
+      return;
+    }
+    const variantLabel = f.variantKind === 'custom' ? f.variantLabel.trim() : f.variantKind;
     const body = {
       name: f.name, description: f.description, category: f.category || undefined,
       price: regularPrice, salePrice, unitCost,
       ...(f.id ? {} : { stock: parseInt(f.stock, 10) }),
       colors: f.colors.split(',').map((c) => c.trim()).filter(Boolean),
+      variantLabel: f.hasVariants ? variantLabel : '', variants: f.hasVariants ? variants : [],
       images: f.images,
     };
     try {
@@ -150,9 +162,16 @@ export default function AdminProducts() {
   }
 
   const edit = (p) => {
+    const savedVariantLabel = p.variantLabel || '';
+    const normalizedVariantLabel = savedVariantLabel.trim().toLocaleLowerCase();
+    const variantKind = normalizedVariantLabel === 'color' || normalizedVariantLabel === 'colour'
+      ? 'Color'
+      : ['shape', 'design', 'shape / design'].includes(normalizedVariantLabel) ? 'Shape / design' : 'custom';
     setF({
       id: p._id, name: p.name, price: (p.price / 100).toFixed(2), salePrice: p.salePrice != null ? (p.salePrice / 100).toFixed(2) : '', unitCost: Number.isFinite(p.unitCost) ? (p.unitCost / 100).toFixed(2) : '', stock: String(p.stock), category: categories.find((category) => category.name.toLocaleLowerCase() === (p.category || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase())?.name || '',
-      colors: (p.colors || []).join(', '), images: p.images || [], description: p.description || '',
+      colors: (p.colors || []).join(', '), hasVariants: Boolean(p.variants?.length), variantKind,
+      variantLabel: variantKind === 'custom' ? savedVariantLabel : '', variants: (p.variants || []).join(', '),
+      images: p.images || [], description: p.description || '',
     });
     setErr('');
     setView('add');
@@ -252,6 +271,43 @@ export default function AdminProducts() {
             <input placeholder="Comma separated, e.g. rose, sage" {...bind('colors')} className={input} />
           </label>
         </div>
+        <section className="space-y-3 rounded-xl border border-stone-200 bg-white/60 p-3">
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-1 accent-rose-700"
+              checked={f.hasVariants}
+              onChange={(event) => setF((current) => ({
+                ...current,
+                hasVariants: event.target.checked,
+                ...(!event.target.checked ? { variantLabel: '', variants: '' } : {}),
+              }))}
+            />
+            <span>
+              <span className="block text-sm font-semibold">This product has selectable variants</span>
+              <span className="block text-xs text-stone-600">Customers must choose the exact color or design before adding it to their cart.</span>
+            </span>
+          </label>
+          {f.hasVariants && <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="min-w-0 space-y-1">
+              <span className="text-sm font-medium">Variant type</span>
+              <select value={f.variantKind} onChange={(event) => setF((current) => ({ ...current, variantKind: event.target.value }))} className={input}>
+                <option value="Color">Color</option>
+                <option value="Shape / design">Shape / design</option>
+                <option value="custom">Other (custom label)</option>
+              </select>
+            </label>
+            {f.variantKind === 'custom' && <label className="min-w-0 space-y-1">
+              <span className="text-sm font-medium">Custom variant label</span>
+              <input required placeholder="e.g. Animal face" {...bind('variantLabel')} className={input} />
+            </label>}
+            <label className="min-w-0 space-y-1 sm:col-span-2">
+              <span className="text-sm font-medium">Choices customers can select</span>
+              <input required placeholder={f.variantKind === 'Color' ? 'e.g. Rose, Sage, Cream' : 'e.g. Bear, Panda, Bunny'} {...bind('variants')} className={input} />
+            </label>
+            <p className="text-xs text-stone-600 sm:col-span-2">Separate choices with commas. The selected {f.variantKind === 'custom' ? (f.variantLabel.trim() || 'option') : f.variantKind.toLocaleLowerCase()} is saved with the cart and order for preparation. Choices share this product’s stock count.</p>
+          </div>}
+        </section>
         <details className="rounded-xl border border-stone-200 p-3">
           <summary className="cursor-pointer font-medium">Manage product categories</summary>
           <div className="mt-3 space-y-3">
@@ -321,6 +377,7 @@ export default function AdminProducts() {
               <p className="text-sm text-stone-600">
                 <ProductPrice product={p} /> · {p.stock > 0 ? p.stock + ' in stock' : 'Sold out (reservations only)'}{Number.isFinite(p.unitCost) ? ` · Cost ${money(p.unitCost)}` : ' · Cost not set'}
               </p>
+              {p.variants?.length > 0 && <p className="text-sm text-stone-500">{p.variantLabel || 'Options'}: {p.variants.join(', ')} · shared stock</p>}
             </div>
             <div className="flex gap-3 text-sm">
               <button type="button" onClick={() => adjustStock(p)} className="cursor-pointer underline">Adjust stock</button>

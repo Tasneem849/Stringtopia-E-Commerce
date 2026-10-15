@@ -12,6 +12,7 @@ export default function BuyBox({ product: p }) {
   const { token, login, addToCart } = useStore();
   const router = useRouter();
   const [qty, setQty] = useState(1);
+  const [variant, setVariant] = useState(p.variants?.length === 1 ? p.variants[0] : '');
   const [note, setNote] = useState('');
   const [creds, setCreds] = useState({ email: '', password: '' });
   const [mode, setMode] = useState('register');
@@ -21,12 +22,19 @@ export default function BuyBox({ product: p }) {
   const field = (k) => ({ value: creds[k], onChange: (e) => setCreds({ ...creds, [k]: e.target.value }) });
 
   function buyNow() {
-    addToCart(p, qty);
+    if (!addToCart(p, qty, variant)) {
+      setMsg(p.variants?.length && !variant ? `Choose ${p.variantLabel || 'an option'} first.` : 'There is not enough stock to add that quantity.');
+      return;
+    }
     router.push('/checkout');
   }
 
   async function reserve(e) {
     e.preventDefault();
+    if (p.variants?.length && !variant) {
+      setMsg(`Choose ${p.variantLabel || 'an option'} first.`);
+      return;
+    }
     try {
       let t = token;
       if (!t) {
@@ -34,7 +42,7 @@ export default function BuyBox({ product: p }) {
         login(session);
         t = session.token;
       }
-      await api('/orders/reserve', { token: t, method: 'POST', body: { items: [{ productId: p._id, qty }], note, delivery, customer } });
+      await api('/orders/reserve', { token: t, method: 'POST', body: { items: [{ productId: p._id, qty, ...(variant ? { variant } : {}) }], note, delivery, customer } });
       router.push('/orders');
     } catch (err) {
       setMsg(err.message);
@@ -45,13 +53,20 @@ export default function BuyBox({ product: p }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-stone-600">{p.stock > 0 ? `${p.stock} in stock` : 'Sold out'}</p>
+      {p.variants?.length > 0 && <label className="block max-w-sm space-y-1 text-sm font-medium">
+        {p.variantLabel || 'Choose an option'}
+        <select required className="field w-full" value={variant} onChange={(event) => { setVariant(event.target.value); setMsg(''); }}>
+          <option value="">Choose {p.variantLabel || 'an option'}</option>
+          {p.variants.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+        </select>
+      </label>}
       <input
         type="number" min={1} max={20} value={qty} className="field w-20"
         onChange={(e) => setQty(Math.max(1, Math.min(20, +e.target.value || 1)))}
       />
       {qty <= p.stock ? (
         <div className="inline-flex flex-wrap items-center gap-3 ml-3">
-          <button onClick={() => { addToCart(p, qty); setMsg('Added to cart'); }} className="btn btn-primary">
+          <button type="button" disabled={p.variants?.length > 0 && !variant} onClick={() => { setMsg(addToCart(p, qty, variant) ? 'Added to cart' : 'There is not enough stock to add that quantity.'); }} className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50">
             Add to cart
           </button>
           <button type="button" onClick={buyNow} className="btn btn-ghost text-sm px-4 py-2">
@@ -90,7 +105,8 @@ export default function BuyBox({ product: p }) {
             {p.stock > 0 && (
               <button
                 type="button" className="btn btn-ghost ml-2"
-                onClick={() => { addToCart(p, p.stock); setMsg(`Added the ${p.stock} in stock to your cart`); }}
+                disabled={p.variants?.length > 0 && !variant}
+                onClick={() => { setMsg(addToCart(p, p.stock, variant) ? `Added the ${p.stock} in stock to your cart` : 'There is not enough stock to add that quantity.'); }}
               >
                 Just buy the {p.stock} in stock
               </button>

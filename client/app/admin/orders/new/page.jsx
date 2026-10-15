@@ -12,6 +12,7 @@ export default function NewAdminOrder() {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
+  const [selectedVariant, setSelectedVariant] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
@@ -59,20 +60,35 @@ export default function NewAdminOrder() {
     if (!selectedProduct) return;
     const product = productById.get(selectedProduct);
     if (!product?.stock) return;
+    const choices = product.variants || [];
+    if (choices.length && !selectedVariant) {
+      setError(`Choose a ${product.variantLabel || 'variant'} before adding ${product.name}.`);
+      return;
+    }
+    const productQty = items.filter((line) => line.productId === selectedProduct).reduce((sum, line) => sum + line.qty, 0);
+    if (productQty >= product.stock) {
+      setError(`Only ${product.stock} ${product.name} item${product.stock === 1 ? '' : 's'} are in stock.`);
+      return;
+    }
     setItems((current) => {
-      const existing = current.find((line) => line.productId === selectedProduct);
-      if (!existing) return [...current, { productId: selectedProduct, qty: 1 }];
-      if (existing.qty >= product.stock) return current;
-      return current.map((line) => line.productId === selectedProduct ? { ...line, qty: line.qty + 1 } : line);
+      const existing = current.find((line) => line.productId === selectedProduct && (line.variant || '') === selectedVariant);
+      if (!existing) return [...current, { productId: selectedProduct, ...(selectedVariant ? { variant: selectedVariant } : {}), qty: 1 }];
+      if (current.filter((line) => line.productId === selectedProduct).reduce((sum, line) => sum + line.qty, 0) >= product.stock) return current;
+      return current.map((line) => line === existing ? { ...line, qty: line.qty + 1 } : line);
     });
     setSelectedProduct('');
+    setSelectedVariant('');
     setError('');
   }
 
-  function setQuantity(productId, rawValue) {
+  function setQuantity(productId, variant, rawValue) {
     const product = productById.get(productId);
-    const qty = Math.max(1, Math.min(product?.stock || 1, Number.parseInt(rawValue, 10) || 1));
-    setItems((current) => current.map((line) => line.productId === productId ? { ...line, qty } : line));
+    setItems((current) => {
+      const otherQty = current.filter((line) => line.productId === productId && (line.variant || '') !== (variant || '')).reduce((sum, line) => sum + line.qty, 0);
+      const max = Math.max(1, (product?.stock || 1) - otherQty);
+      const qty = Math.max(1, Math.min(max, Number.parseInt(rawValue, 10) || 1));
+      return current.map((line) => line.productId === productId && (line.variant || '') === (variant || '') ? { ...line, qty } : line);
+    });
   }
 
   async function submit(event) {
@@ -151,12 +167,18 @@ export default function NewAdminOrder() {
         <section className="card space-y-3">
           <h2 className="text-lg font-semibold">Products</h2>
           {loading ? <p role="status" className="text-stone-600">Loading products...</p> : (
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
               <input aria-label="Search in-stock products" className={input} placeholder="Find a product" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedProduct(''); }} />
-              <select className={input} aria-label="Select a product" value={selectedProduct} onChange={(event) => setSelectedProduct(event.target.value)}>
+              <select className={input} aria-label="Select a product" value={selectedProduct} onChange={(event) => { setSelectedProduct(event.target.value); setSelectedVariant(''); }}>
                 <option value="">Choose an in-stock product</option>
                 {visibleProducts.map((product) => <option key={product._id} value={product._id}>{product.name} · {money(effectivePrice(product))} · {product.stock} available</option>)}
               </select>
+              {productById.get(selectedProduct)?.variants?.length > 0
+                ? <select className={input} aria-label={`Choose ${productById.get(selectedProduct).variantLabel || 'a variant'}`} value={selectedVariant} onChange={(event) => setSelectedVariant(event.target.value)}>
+                  <option value="">Choose {productById.get(selectedProduct).variantLabel || 'an option'}</option>
+                  {productById.get(selectedProduct).variants.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                </select>
+                : <span aria-hidden="true" />}
               <button type="button" onClick={addProduct} disabled={!selectedProduct} className="btn btn-ghost whitespace-nowrap">Add item</button>
             </div>
           )}
@@ -165,11 +187,12 @@ export default function NewAdminOrder() {
             {items.map((line) => {
               const product = productById.get(line.productId);
               if (!product) return null;
-              return <div key={line.productId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 p-3">
-                <div className="min-w-0 flex-1"><p className="font-medium">{product.name}</p><p className="text-sm text-stone-600">{money(effectivePrice(product))} each{Number.isFinite(product.unitCost) ? ` · cost ${money(product.unitCost)} each` : ' · unit cost not set'}</p></div>
-                <label className="flex items-center gap-2 text-sm">Qty <input className="field w-20" type="number" min="1" max={product.stock} value={line.qty} onChange={(event) => setQuantity(line.productId, event.target.value)} /></label>
+              const lineKey = JSON.stringify([line.productId, line.variant || '']);
+              return <div key={lineKey} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 p-3">
+                <div className="min-w-0 flex-1"><p className="font-medium">{product.name}</p>{line.variant && <p className="text-sm text-stone-600">{product.variantLabel || 'Option'}: {line.variant}</p>}<p className="text-sm text-stone-600">{money(effectivePrice(product))} each{Number.isFinite(product.unitCost) ? ` · cost ${money(product.unitCost)} each` : ' · unit cost not set'}</p></div>
+                <label className="flex items-center gap-2 text-sm">Qty <input className="field w-20" type="number" min="1" max={product.stock} value={line.qty} onChange={(event) => setQuantity(line.productId, line.variant, event.target.value)} /></label>
                 <strong>{money(effectivePrice(product) * line.qty)}</strong>
-                <button type="button" className="cursor-pointer text-red-700 underline" onClick={() => setItems((current) => current.filter((item) => item.productId !== line.productId))}>Remove</button>
+                <button type="button" className="cursor-pointer text-red-700 underline" onClick={() => setItems((current) => current.filter((item) => JSON.stringify([item.productId, item.variant || '']) !== lineKey))}>Remove</button>
               </div>;
             })}
           </div>}

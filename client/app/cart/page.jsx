@@ -2,12 +2,13 @@
 import Link from 'next/link';
 import { effectivePrice, img, money } from '@/lib/api';
 import ProductPrice from '@/components/ProductPrice';
-import { useStore } from '@/components/Providers';
+import { cartLineKey, useStore } from '@/components/Providers';
 import CheckoutSteps from '@/components/CheckoutSteps';
 
 export default function Cart() {
-  const { cart, setQty, removeItem, clearCart, ready } = useStore();
+  const { cart, setQty, setVariant, removeItem, clearCart, ready } = useStore();
   const subtotal = cart.reduce((sum, item) => sum + effectivePrice(item) * item.qty, 0);
+  const needsVariant = cart.some((item) => item.variants?.length && !item.variants.includes(item.variant));
 
   if (!ready) return <p role="status">Loading your cart…</p>;
 
@@ -67,7 +68,7 @@ export default function Cart() {
       <div className="cart-page-layout">
         <div className="cart-items" aria-label="Items in your cart">
           {cart.map((item) => (
-            <article key={item.productId} className="cart-item card">
+            <article key={cartLineKey(item)} className="cart-item card">
               <div className="cart-item-product">
                 <div className="cart-item-image" aria-hidden="true">
                   {item.image ? <img src={img(item.image, 180)} alt="" loading="lazy" decoding="async" /> : <span>🧶</span>}
@@ -75,17 +76,29 @@ export default function Cart() {
                 <div className="min-w-0">
                   <Link href={`/products/${item.slug}`} className="font-bold hover:underline">{item.name}</Link>
                   <p className="mt-1 text-sm text-stone-500"><ProductPrice product={item} /> each</p>
+                  {item.variants?.length > 0 && <label className="mt-2 block max-w-xs space-y-1 text-sm font-medium">
+                    {item.variantLabel || 'Choose an option'}
+                    <select
+                      className="field w-full"
+                      value={item.variant || ''}
+                      onChange={(event) => setVariant(cartLineKey(item), event.target.value)}
+                      aria-label={`${item.variantLabel || 'Choose an option'} for ${item.name}`}
+                    >
+                      <option value="">Choose {item.variantLabel || 'an option'}</option>
+                      {item.variants.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                    </select>
+                  </label>}
                 </div>
               </div>
               <div className="cart-item-controls">
-                <label className="sr-only" htmlFor={`quantity-${item.productId}`}>Quantity for {item.name}</label>
+                <label className="sr-only" htmlFor={`quantity-${encodeURIComponent(cartLineKey(item))}`}>Quantity for {item.name}{item.variant ? `, ${item.variantLabel || 'option'} ${item.variant}` : ''}</label>
                 <input
-                  id={`quantity-${item.productId}`}
+                  id={`quantity-${encodeURIComponent(cartLineKey(item))}`}
                   type="number" min={1} max={20} value={item.qty} className="field w-20"
-                  onChange={(event) => setQty(item.productId, Math.max(1, Math.min(20, +event.target.value || 1)))}
+                  onChange={(event) => setQty(cartLineKey(item), Math.max(1, Math.min(20, +event.target.value || 1)))}
                 />
                 <strong className="cart-item-total">{money(effectivePrice(item) * item.qty)}</strong>
-                <button type="button" onClick={() => removeItem(item.productId)} className="cart-remove-button">Remove</button>
+                <button type="button" onClick={() => removeItem(cartLineKey(item))} className="cart-remove-button">Remove</button>
               </div>
             </article>
           ))}
@@ -95,7 +108,8 @@ export default function Cart() {
           <h2 id="cart-summary-title" className="text-xl font-bold">Cart summary</h2>
           <div className="cart-summary-row"><span>{cart.reduce((count, item) => count + item.qty, 0)} items</span><span>{money(subtotal)}</span></div>
           <p className="cart-summary-note">Delivery and address details come next.</p>
-          <Link href="/checkout" className="btn btn-primary w-full">Continue to checkout <span aria-hidden="true">→</span></Link>
+          {needsVariant ? <p className="text-sm text-amber-800" role="status">Choose each product’s option before continuing to checkout.</p>
+            : <Link href="/checkout" className="btn btn-primary w-full">Continue to checkout <span aria-hidden="true">→</span></Link>}
           <p className="text-center text-sm text-stone-500">No account needed</p>
         </aside>
       </div>

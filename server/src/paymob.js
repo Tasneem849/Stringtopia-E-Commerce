@@ -125,7 +125,13 @@ export async function createCheckout(order, attempt) {
       payment_methods: methods, // cards, mobile wallets... whatever integrations you listed
       // one line per product with quantity 1, so the lines always add up exactly to the amount
       items: [
-        ...order.items.map((i) => ({ name: `${i.qty} x ${i.name}`.slice(0, 50), amount: i.price * i.qty, description: i.name.slice(0, 100), quantity: 1 })),
+        ...order.items.map((i) => {
+          const choice = i.variant ? ` · ${i.variantLabel || 'Option'}: ${i.variant}` : '';
+          return {
+            name: `${i.qty} x ${i.name}${choice}`.slice(0, 50), amount: i.price * i.qty,
+            description: `${i.name}${choice}`.slice(0, 100), quantity: 1,
+          };
+        }),
         ...(order.shippingFee ? [{ name: 'Delivery', amount: order.shippingFee, description: 'Delivery', quantity: 1 }] : []),
       ],
       billing_data: {

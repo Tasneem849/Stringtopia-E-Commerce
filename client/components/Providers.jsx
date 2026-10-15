@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
+export const cartLineKey = (item) => JSON.stringify([String(item.productId), item.variant || '']);
 const GUEST = { token: null, user: null };
 
 // Auth + cart state, persisted in localStorage.
@@ -16,6 +17,7 @@ export default function Providers({ children }) {
   const [ready, setReady] = useState(false);
   const [config, setConfig] = useState({ deliveryFee: 0, pickupAddress: '', instaPayAddress: '', instaPayAccountName: '', instaPayWhatsapp: '', backgroundAudioUrl: '' });
   const authRef = useRef(auth);
+  const syncedCartProductsRef = useRef(new Set());
   authRef.current = auth;
 
   useEffect(() => {
@@ -92,13 +94,18 @@ export default function Providers({ children }) {
 
   useEffect(() => {
     if (!ready) return undefined;
-    const legacyItems = cart.filter((item) => item.slug && !Object.prototype.hasOwnProperty.call(item, 'salePrice'));
-    if (!legacyItems.length) return undefined;
+    const productsToSync = [...new Map(cart.filter((item) => item.slug && !syncedCartProductsRef.current.has(String(item.productId)))
+      .map((item) => [String(item.productId), item])).values()];
+    if (!productsToSync.length) return undefined;
+    productsToSync.forEach((item) => syncedCartProductsRef.current.add(String(item.productId)));
     let active = true;
-    Promise.all(legacyItems.map(async (item) => {
+    Promise.all(productsToSync.map(async (item) => {
       try {
         const product = await api(`/products/${encodeURIComponent(item.slug)}`);
-        return { productId: String(item.productId), price: product.price, salePrice: product.salePrice ?? null };
+        return {
+          productId: String(item.productId), price: product.price, salePrice: product.salePrice ?? null,
+          stock: product.stock, variants: product.variants || [], variantLabel: product.variantLabel || '',
+        };
       } catch {
         return null;
       }
@@ -108,7 +115,11 @@ export default function Providers({ children }) {
       if (!latestPrices.size) return;
       setCart((items) => items.map((item) => {
         const latest = latestPrices.get(String(item.productId));
-        return latest ? { ...item, price: latest.price, salePrice: latest.salePrice } : item;
+        return latest ? {
+          ...item, price: latest.price, salePrice: latest.salePrice, stock: latest.stock,
+          variants: latest.variants, variantLabel: latest.variantLabel,
+          ...(item.variant && !latest.variants.includes(item.variant) ? { variant: '' } : {}),
+        } : item;
       }));
     });
     return () => { active = false; };
@@ -120,23 +131,65 @@ export default function Providers({ children }) {
     return nextConfig;
   };
 
-  const addToCart = (p, qty) => {
+  const addToCart = (p, qty, selectedVariant = '') => {
     const stock = Number(p.stock);
     const limit = Number.isFinite(stock) ? Math.min(20, Math.max(0, stock)) : 20;
-    if (!limit) return;
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    const variant = String(selectedVariant || '').trim();
+    if (!limit || (variants.length && !variants.includes(variant)) || (!variants.length && variant)) return false;
     const amount = Math.max(1, Math.min(20, Math.floor(Number(qty) || 1)));
+    const key = cartLineKey({ productId: p._id, variant });
+    const currentTotal = cart.filter((item) => String(item.productId) === String(p._id)).reduce((sum, item) => sum + item.qty, 0);
+    if (currentTotal >= limit) return false;
     setCart((c) => {
-      const found = c.find((i) => String(i.productId) === String(p._id));
+      const found = c.find((i) => cartLineKey(i) === key);
+      const productTotal = c.filter((item) => String(item.productId) === String(p._id)).reduce((sum, item) => sum + item.qty, 0);
+      if (productTotal >= limit) return c;
+      const nextQty = Math.min(limit - productTotal + (found?.qty || 0), (found?.qty || 0) + amount);
       if (found) {
-        if (found.qty >= limit) return c;
-        const nextQty = Math.min(limit, found.qty + amount);
-        return c.map((i) => (i === found ? { ...i, name: p.name, image: i.image || p.images?.[0] || '', price: p.price, salePrice: p.salePrice ?? null, qty: nextQty } : i));
+        return c.map((i) => (cartLineKey(i) === key ? {
+          ...i, name: p.name, image: i.image || p.images?.[0] || '', price: p.price,
+          salePrice: p.salePrice ?? null, stock: limit, variants, variantLabel: p.variantLabel || '', qty: nextQty,
+        } : i));
       }
-      return [...c, { productId: p._id, slug: p.slug, name: p.name, price: p.price, salePrice: p.salePrice ?? null, image: p.images?.[0] || '', qty: Math.min(limit, amount) }];
+      return [...c, {
+        productId: p._id, slug: p.slug, name: p.name, price: p.price, salePrice: p.salePrice ?? null,
+        image: p.images?.[0] || '', stock: limit, variants, variantLabel: p.variantLabel || '',
+        ...(variant ? { variant } : {}), qty: Math.min(limit - productTotal, amount),
+      }];
     });
+    return true;
   };
-  const setQty = (id, qty) => setCart((c) => c.map((i) => (i.productId === id ? { ...i, qty } : i)));
-  const removeItem = (id) => setCart((c) => c.filter((i) => i.productId !== id));
+  const setQty = (key, qty) => setCart((c) => {
+    const item = c.find((entry) => cartLineKey(entry) === key);
+    if (!item) return c;
+    const otherQty = c.filter((entry) => String(entry.productId) === String(item.productId) && cartLineKey(entry) !== key)
+      .reduce((sum, entry) => sum + entry.qty, 0);
+    const limit = Number.isFinite(Number(item.stock)) ? Math.min(20, Number(item.stock)) : 20;
+    const maxForLine = Math.max(item.qty, limit - otherQty);
+    if (maxForLine < 1) return c;
+    const nextQty = Math.max(1, Math.min(maxForLine, Math.floor(Number(qty) || 1)));
+    return c.map((entry) => cartLineKey(entry) === key ? { ...entry, qty: nextQty } : entry);
+  });
+  const setVariant = (key, variant) => setCart((c) => {
+    const current = c.find((entry) => cartLineKey(entry) === key);
+    if (!current || current.variant === variant || !(current.variants || []).includes(variant)) return c;
+    const nextKey = cartLineKey({ ...current, variant });
+    const existing = c.find((entry) => cartLineKey(entry) === nextKey);
+    if (existing) {
+      const stock = Number.isFinite(Number(current.stock)) ? Math.min(20, Number(current.stock)) : 20;
+      const otherQty = c.filter((entry) => String(entry.productId) === String(current.productId)
+        && cartLineKey(entry) !== key && cartLineKey(entry) !== nextKey)
+        .reduce((sum, entry) => sum + entry.qty, 0);
+      const availableForMergedLine = stock - otherQty;
+      if (availableForMergedLine < 1) return c;
+      const mergedQty = Math.min(availableForMergedLine, existing.qty + current.qty);
+      return c.filter((entry) => cartLineKey(entry) !== key && cartLineKey(entry) !== nextKey)
+        .concat({ ...existing, variant, qty: Math.max(1, mergedQty) });
+    }
+    return c.map((entry) => cartLineKey(entry) === key ? { ...entry, variant } : entry);
+  });
+  const removeItem = (key) => setCart((c) => c.filter((i) => cartLineKey(i) !== key));
   const isFavorite = (id) => favorites.some((item) => String(item._id) === String(id));
   const toggleFavorite = async (product) => {
     if (!auth.token) throw new Error('Log in to save favorites.');
@@ -166,7 +219,7 @@ export default function Providers({ children }) {
   };
 
   const value = {
-    ...auth, ready, config, refreshConfig, cart, addToCart, setQty, removeItem,
+    ...auth, ready, config, refreshConfig, cart, addToCart, setQty, setVariant, removeItem,
     favorites, favoritesLoading, favoritesError, isFavorite, toggleFavorite,
     login, logout, clearCart: () => setCart([]),
   };

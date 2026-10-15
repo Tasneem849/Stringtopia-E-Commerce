@@ -88,7 +88,12 @@ export default function Thanks() {
       <h1 className="text-3xl font-bold">
         {paid ? 'Thank you! 🧶' : order.status === 'expired' ? 'This order has expired' : order.status === 'cancelled' ? 'This order was cancelled' : isCashOnDelivery && order.status === 'pending' ? 'Your order is placed' : isInstaPay && order.status === 'pending' ? 'Complete your InstaPay transfer' : failed ? 'The payment did not go through' : 'Confirming your payment...'}
       </h1>
-      {order.items.map((item, index) => <p key={index}>{item.qty} × {item.name}</p>)}
+      {order.items.map((item, index) => <div key={index}>
+        <p>{item.qty} × {item.name}</p>
+        {item.variant && <p className="mt-1 inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900">
+          Your selection: {item.variantLabel || 'Option'} — {item.variant}
+        </p>}
+      </div>)}
       {order.promoCode && order.discountAmount > 0 && <p className="checkout-promo-feedback checkout-promo-feedback-success">Promo {order.promoCode}: saved {money(order.discountAmount)}</p>}
       <p className="font-medium">Total: {money(order.total)}</p>
       {paymentCheckNotice && <p className="text-sm text-stone-600" role="status">{paymentCheckNotice}</p>}
