@@ -121,17 +121,23 @@ export function friendlyErrorMessage(error, fallback = 'We couldn’t complete t
 }
 
 export async function api(path, { token, method = 'GET', body, revalidate, timeoutMs } = {}) {
+  const inBrowser = typeof window !== 'undefined';
+  const authAction = inBrowser ? /^\/auth\/(register|login|google)$/.exec(path)?.[1] : null;
+  const requestUrl = inBrowser ? (authAction ? '/api/session' : `/api/backend${path}`) : API + path;
   const init = {
     method,
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
-    body: body && JSON.stringify(body),
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(!inBrowser && token && { Authorization: `Bearer ${token}` }) },
+    body: authAction
+      ? JSON.stringify({ action: authAction, payload: body || {} })
+      : body && JSON.stringify(body),
   };
-  if (revalidate != null && method === 'GET' && !token) init.next = { revalidate };
+  if (inBrowser) init.credentials = 'same-origin';
+  if (!inBrowser && revalidate != null && method === 'GET' && !token) init.next = { revalidate };
   else init.cache = 'no-store';
   if (timeoutMs) init.signal = AbortSignal.timeout(timeoutMs);
   let res;
   try {
-    res = await fetch(API + path, init);
+    res = await fetch(requestUrl, init);
   } catch (cause) {
     throw transportError(cause, path, method);
   }

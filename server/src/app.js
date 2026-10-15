@@ -17,11 +17,34 @@ for (const key of ['CLIENT_URL', 'API_URL']) {
   if (process.env[key]) process.env[key] = process.env[key].replace(/\/+$/, '');
 }
 
+const configuredClientOrigins = new Set(
+  (process.env.CLIENT_URL || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean),
+);
+
+function isAllowedClientOrigin(origin) {
+  if (!origin || configuredClientOrigins.has(origin)) return true;
+  if (process.env.NODE_ENV === 'production') return false;
+
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 // The Express app on its own: it does not listen or connect to the database, so tests can use it directly
 export const app = express();
 app.set('trust proxy', 1); // behind Render's proxy, so req.ip is the real visitor
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL }));
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, isAllowedClientOrigin(origin));
+  },
+}));
 app.use((req, res, next) => {
   req.requestId = randomUUID();
   res.setHeader('X-Request-Id', req.requestId);
@@ -49,7 +72,7 @@ app.get('/api/config', async (req, res) => {
     backgroundAudioUrl: settings?.backgroundAudioUrl || '',
   });
 });
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60e3, max: 100 }), authRoutes);
+app.use('/api/auth', rateLimit({ scope: 'auth-general', windowMs: 15 * 60e3, max: 100 }), authRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);

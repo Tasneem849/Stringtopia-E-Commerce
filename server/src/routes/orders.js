@@ -10,24 +10,26 @@ import { createCheckout, inquireTransactionByReference, isValidHmac } from '../p
 import { requestPaymobRefund, recordPaymobRefund, reconcilePaymobRefund } from '../refunds.js';
 import { feeFor, sumTotal, toEgPhone } from '../pricing.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { rateLimit, rateLimitClientIp } from '../middleware/rateLimit.js';
 
 const router = Router();
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const AWAITING_PAYMENT = ['pending', 'approved'];
 const PAY_HOURS = 23; // how long an approved reservation stays payable
 const CANCEL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
-const promoValidationLimit = rateLimit({ windowMs: 10 * 60e3, max: 20 });
-const checkoutLimit = rateLimit({ windowMs: 10 * 60e3, max: 12 });
+const promoValidationLimit = rateLimit({ scope: 'orders-promo-validation', windowMs: 10 * 60e3, max: 20 });
+const checkoutLimit = rateLimit({ scope: 'orders-checkout', windowMs: 10 * 60e3, max: 12 });
 const paymobRetryLimit = rateLimit({
+  scope: 'orders-paymob-retry',
   windowMs: 15 * 60e3,
   max: 6,
-  keyGenerator: (req) => [`paymob-retry-ip:${req.ip || 'unknown'}`, `paymob-retry-order:${req.params.token || 'unknown'}`],
+  keyGenerator: (req) => [`paymob-retry-ip:${rateLimitClientIp(req)}`, `paymob-retry-order:${req.params.token || 'unknown'}`],
 });
 const reconciliationLimit = rateLimit({
+  scope: 'orders-paymob-reconcile',
   windowMs: 15 * 60e3,
   max: 3,
-  keyGenerator: (req) => [`reconcile-ip:${req.ip || 'unknown'}`, `reconcile-order:${req.params.token || 'unknown'}`],
+  keyGenerator: (req) => [`reconcile-ip:${rateLimitClientIp(req)}`, `reconcile-order:${req.params.token || 'unknown'}`],
 });
 const promoCodeSchema = z.string().trim().min(3).max(24).regex(/^[A-Za-z0-9_-]+$/);
 const itemsSchema = z.array(z.object({
@@ -167,7 +169,7 @@ router.post('/checkout', checkoutLimit, optionalAuth, async (req, res) => {
   const email = customer.email.trim().toLowerCase();
   const phone = toEgPhone(customer.phone);
   const checkoutIpHash = crypto.createHmac('sha256', process.env.CHECKOUT_IP_HASH_SECRET || process.env.JWT_SECRET)
-    .update(req.ip || 'unknown').digest('hex');
+    .update(rateLimitClientIp(req)).digest('hex');
 
   // A returning customer who retries Paymob should not lose stock to their abandoned first attempt.
   const abandonedPaymob = await Order.find({
@@ -418,16 +420,15 @@ export async function sweep() {
     await expire({ _id: o._id, status: o.status });
   }
 
-  if (process.env.PAYMOB_API_KEY) {
-    const pendingRefunds = await Order.find({
+  const pendingRefunds = await Order.find({
       status: 'cancelled', paymentMethod: 'paymob', refundStatus: 'processing',
       paymobTransactionId: { $exists: true }, refundRequestedAt: { $lt: ago(60 * 1000) },
       $or: [
         { refundReconciliationCheckedAt: { $exists: false } },
         { refundReconciliationCheckedAt: { $lt: ago(10 * 60 * 1000) } },
       ],
-    }).sort('refundRequestedAt').limit(20);
-    for (const order of pendingRefunds) {
+  }).sort('refundRequestedAt').limit(20);
+  for (const order of pendingRefunds) {
       const checkedAt = new Date();
       const checkFilter = {
         _id: order._id,
@@ -438,13 +439,25 @@ export async function sweep() {
       };
       const claimed = await Order.findOneAndUpdate(checkFilter, { refundReconciliationCheckedAt: checkedAt }, { new: true });
       if (!claimed) continue;
+      if (!process.env.PAYMOB_API_KEY) {
+        const failed = await Order.findOneAndUpdate({ _id: claimed._id, refundStatus: 'processing' }, {
+          $set: {
+            refundStatus: 'failed',
+            refundError: 'Automatic refund status checking is paused because PAYMOB_API_KEY is missing; configure it in the API environment and retry.',
+          },
+        }, { new: true });
+        if (failed) {
+          mail.problem(failed, `The automatic Paymob refund could not be verified because PAYMOB_API_KEY is missing. Add it to the API environment, then retry the refund. Order ${failed.id} remains cancelled.`);
+          mail.refundFailed(failed);
+        }
+        continue;
+      }
       try {
         const refunded = await reconcilePaymobRefund(claimed);
         if (refunded) mail.refunded(refunded);
       } catch (error) {
         console.error(`Paymob refund reconciliation failed for order ${order.id}:`, error.message);
       }
-    }
   }
 }
 

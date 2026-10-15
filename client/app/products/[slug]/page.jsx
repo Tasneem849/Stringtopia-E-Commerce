@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import { api, img } from '@/lib/api';
 import Gallery from '@/components/Gallery';
 import BuyBox from '@/components/BuyBox';
@@ -22,6 +23,7 @@ export async function generateMetadata({ params }) {
 export default async function ProductPage({ params }) {
   const p = await get((await params).slug);
   if (!p) notFound();
+  const nonce = (await headers()).get('x-nonce');
   const productJsonLd = {
     '@context': 'https://schema.org', '@type': 'Product', name: p.name,
     description: p.description, image: p.images || [], sku: p.slug,
@@ -29,7 +31,7 @@ export default async function ProductPage({ params }) {
   };
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd).replace(/</g, '\\u003c') }} />
+      <script nonce={nonce || undefined} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd).replace(/</g, '\\u003c') }} />
       <Gallery images={p.images} />
       <div>
         <div className="flex items-start justify-between gap-3">

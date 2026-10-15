@@ -2,7 +2,7 @@
 import { useCallback, useRef, useState } from 'react';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
-import { API, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import { getPostLoginPath } from '@/lib/navigation';
 import { useStore } from './Providers';
 
@@ -26,32 +26,19 @@ function describeGoogleError(error) {
   }
 
   if (!error?.status && error?.name === 'TypeError') {
-    let apiUrl;
-    try { apiUrl = new URL(API); } catch {}
-
-    const isLocalApi = apiUrl && ['localhost', '127.0.0.1', '::1'].includes(apiUrl.hostname);
-    const isHostedPage = typeof window !== 'undefined'
-      && !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-
-    if (isLocalApi && isHostedPage) {
+    const localHosts = ['localhost', '127.0.0.1', '::1'];
+    const localSite = typeof window !== 'undefined' && localHosts.includes(window.location.hostname);
+    if (localSite) {
       return {
-        title: 'The sign-in API is configured for a local computer',
-        message: `This store is hosted at ${window.location.host}, but its API address is ${apiUrl.origin}. On a hosted site, localhost points to each visitor’s own device. Set NEXT_PUBLIC_API_URL to your deployed API’s public URL (ending in /api) in the client hosting settings, then redeploy.`,
-        retryable: false,
-      };
-    }
-
-    if (isLocalApi) {
-      return {
-        title: 'The local sign-in server did not respond',
-        message: `Stringtopia could not reach ${apiUrl.origin}. Check that the server is running from the server folder with npm run dev, then try again.`,
+        title: 'Could not connect to Stringtopia locally',
+        message: 'Stringtopia could not reach its local sign-in route. Make sure both the client and API are running, refresh the page, and try again.',
         retryable: true,
       };
     }
 
     return {
       title: 'Could not reach Stringtopia’s sign-in server',
-      message: `The browser received no response from ${apiUrl?.host || 'the configured API'}. Check your connection. If it still fails, the API may be offline, its address may be incorrect, or its CORS settings may not allow this store.`,
+      message: 'The sign-in request did not reach Stringtopia. Check your internet connection and try again. If this continues, contact Stringtopia support.',
       retryable: true,
     };
   }
@@ -62,6 +49,26 @@ function describeGoogleError(error) {
       message: error.message || 'Please wait a few minutes before trying Google sign-in again.',
       retryable: false,
     };
+  }
+
+  if (error?.code === 'ADMIN_MFA_REQUIRED' || error?.code === 'ADMIN_MFA_INVALID') {
+    return {
+      title: error.code === 'ADMIN_MFA_INVALID' ? 'Check your authenticator code' : 'Administrator verification required',
+      message: error.message || 'Enter the current six-digit code from the shop administrator’s authenticator app.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'ADMIN_MFA_NOT_CONFIGURED') {
+    return {
+      title: 'Administrator sign-in is locked for setup',
+      message: error.message || 'The shop owner must configure an authenticator secret in the API hosting settings before admin sign-in can continue.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'AUTH_SERVICE_UNAVAILABLE') {
+    return { title: 'Could not reach Stringtopia’s sign-in service', message: error.message, retryable: true };
   }
 
   if (error?.status === 503) {
@@ -88,26 +95,29 @@ function describeGoogleError(error) {
   };
 }
 
-export default function GoogleSignInButton() {
+export default function GoogleSignInButton({ nonce }) {
   const { login } = useStore();
   const router = useRouter();
   const buttonRef = useRef(null);
   const credentialRef = useRef('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [requiresAdminCode, setRequiresAdminCode] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
 
-  const submitCredential = useCallback(async (credential) => {
+  const submitCredential = useCallback(async (credential, code = '') => {
     setBusy(true);
     setError(null);
     try {
       login(await api('/auth/google', {
         method: 'POST',
-        body: { credential },
+        body: { credential, ...(code ? { totpCode: code } : {}) },
         timeoutMs: 15000,
       }));
       credentialRef.current = '';
       router.replace(getPostLoginPath());
     } catch (err) {
+      if (err.code === 'ADMIN_MFA_REQUIRED' || err.code === 'ADMIN_MFA_INVALID') setRequiresAdminCode(true);
       setError(describeGoogleError(err));
     } finally {
       setBusy(false);
@@ -160,6 +170,7 @@ export default function GoogleSignInButton() {
       </div>
       <Script
         src="https://accounts.google.com/gsi/client"
+        nonce={nonce || undefined}
         strategy="afterInteractive"
         onReady={renderButton}
         onError={() => setError({
@@ -186,6 +197,22 @@ export default function GoogleSignInButton() {
           )}
         </div>
       )}
+      {requiresAdminCode && <div className="space-y-2">
+        <label className="block space-y-1 text-sm font-medium">
+          <span>Administrator authenticator code</span>
+          <input
+            type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+            placeholder="6-digit code" value={totpCode}
+            onChange={(event) => { setTotpCode(event.target.value); setError(null); }}
+            className="field w-full"
+          />
+        </label>
+        <button
+          type="button" className="btn btn-primary w-full disabled:opacity-60"
+          disabled={busy || !credentialRef.current || totpCode.length !== 6}
+          onClick={() => submitCredential(credentialRef.current, totpCode)}
+        >Continue securely</button>
+      </div>}
     </div>
   );
 }

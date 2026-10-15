@@ -9,15 +9,17 @@ import { useStore } from '@/components/Providers';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
 
 export default function Login() {
-  const { login } = useStore();
+  const { login, cspNonce } = useStore();
   const router = useRouter();
   const [mode, setMode] = useState('login');
-  const [f, setF] = useState({ email: '', password: '' });
+  const [f, setF] = useState({ email: '', password: '', totpCode: '' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [needsAdminCode, setNeedsAdminCode] = useState(false);
   const set = (k) => (e) => {
     setF((current) => ({ ...current, [k]: e.target.value }));
     setErr(null);
+    if (k === 'email') setNeedsAdminCode(false);
   };
 
   async function submitCredentials(submitMode = mode) {
@@ -54,9 +56,14 @@ export default function Login() {
     setBusy(true);
     setErr(null);
     try {
-      login(await api(`/auth/${submitMode}`, { method: 'POST', body: { ...f, email }, timeoutMs: 15000 }));
+      login(await api(`/auth/${submitMode}`, {
+        method: 'POST',
+        body: { ...f, email, ...(needsAdminCode ? { totpCode: f.totpCode } : {}) },
+        timeoutMs: 15000,
+      }));
       router.replace(getPostLoginPath());
     } catch (error) {
+      if (error.code === 'ADMIN_MFA_REQUIRED' || error.code === 'ADMIN_MFA_INVALID') setNeedsAdminCode(true);
       setErr(describeAuthError(error, submitMode));
     } finally {
       setBusy(false);
@@ -86,6 +93,14 @@ export default function Login() {
         onChange={set('password')}
         className={input}
       />
+      {needsAdminCode && <label className="block space-y-1 text-sm font-medium">
+        <span>Administrator authenticator code</span>
+        <input
+          type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+          placeholder="6-digit code" value={f.totpCode} onChange={set('totpCode')}
+          className={input}
+        />
+      </label>}
       {err && <div id="auth-error" role="alert" className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
         <p className="font-bold">{err.title}</p>
         <p>{err.message}</p>
@@ -99,7 +114,7 @@ export default function Login() {
       <button className="btn btn-primary w-full" disabled={busy}>
         {busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}
       </button>
-      <GoogleSignInButton />
+      <GoogleSignInButton nonce={cspNonce} />
       <button type="button" className="cursor-pointer text-sm underline hover:text-blue-700" onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}>
         {mode === 'login' ? 'New here? Create an account' : 'Have an account? Log in'}
       </button>

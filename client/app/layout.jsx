@@ -1,6 +1,7 @@
 import './globals.css';
 import Link from 'next/link';
 import { Gaegu, Figtree } from 'next/font/google';
+import { headers } from 'next/headers';
 import Providers from '@/components/Providers';
 import Header from '@/components/Header';
 import BackgroundAudioPlayer from '@/components/BackgroundAudioPlayer';
@@ -15,11 +16,12 @@ export const metadata = {
   description: 'Handmade crochet pieces, made with love.',
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const cspNonce = (await headers()).get('x-nonce') || '';
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="min-h-screen">
-        <Providers>
+        <Providers cspNonce={cspNonce}>
           <Header />
           <WorkshopReminder />
           <BackgroundAudioPlayer />
@@ -40,7 +42,7 @@ export default function RootLayout({ children }) {
                 rel="noopener noreferrer"
                 aria-label="Stringtopia on Facebook"
                 title="Facebook"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#1877F2] transition-colors hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#1877F2] transition-colors hover:bg-[#2884fc7c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
                   <path d="M13.5 21v-7.6h2.55l.38-2.96H13.5V8.55c0-.86.24-1.45 1.47-1.45h1.57V4.46c-.27-.04-1.2-.12-2.28-.12-2.26 0-3.8 1.38-3.8 3.92v2.18H7.9v2.96h2.56V21h3.04Z" />
@@ -66,7 +68,7 @@ export default function RootLayout({ children }) {
                 rel="noopener noreferrer"
                 aria-label="Stringtopia on WhatsApp"
                 title="WhatsApp"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#25D366] transition-colors hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#25D366] transition-colors hover:bg-[#3ef78261] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20.4 11.9a8.4 8.4 0 0 1-12.4 7.4L4 20l.8-3.9a8.4 8.4 0 1 1 15.6-4.2Z" />

@@ -5,23 +5,44 @@ import { OAuth2Client } from 'google-auth-library';
 import { z } from 'zod';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { rateLimit, rateLimitClientIp } from '../middleware/rateLimit.js';
 import { ACCOUNT_DELETION_GRACE_MS, finalizeAccountDeletion } from '../accountDeletion.js';
+import { verifyAdminTotp } from '../totp.js';
 
 const router = Router();
 const googleClient = new OAuth2Client();
 const sign = (u) => jwt.sign({ id: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: u.role === 'admin' ? '30m' : '7d' });
 const pub = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role });
-const registerLimit = rateLimit({ windowMs: 15 * 60e3, max: 5 });
+const registerLimit = rateLimit({ scope: 'auth-register', windowMs: 15 * 60e3, max: 5 });
 const loginLimit = rateLimit({
+  scope: 'auth-login',
   windowMs: 15 * 60e3,
   max: 8,
   keyGenerator: (req) => [
-    `login-ip:${req.ip || 'unknown'}`,
+    `login-ip:${rateLimitClientIp(req)}`,
     `login-email:${String(req.body?.email || '').trim().toLowerCase() || 'missing'}`,
   ],
 });
+const googleLimit = rateLimit({ scope: 'auth-google', windowMs: 15 * 60e3, max: 10 });
 const deletionFields = 'deletionRequestedAt deletionScheduledFor deletionFinalizingAt';
+
+function requireAdminTotp(user, code, res) {
+  if (user?.role !== 'admin') return true;
+  const secret = process.env.ADMIN_TOTP_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV !== 'production') return true;
+    res.status(503).json({ code: 'ADMIN_MFA_NOT_CONFIGURED', message: 'Admin sign-in is temporarily locked until the shop owner configures the authenticator secret in the API environment.' });
+    return false;
+  }
+  if (!verifyAdminTotp(code, secret)) {
+    res.status(401).json({
+      code: code ? 'ADMIN_MFA_INVALID' : 'ADMIN_MFA_REQUIRED',
+      message: code ? 'That authenticator code is incorrect or expired. Enter the latest six-digit code and try again.' : 'Enter the six-digit code from the shop administrator’s authenticator app to continue.',
+    });
+    return false;
+  }
+  return true;
+}
 
 function deletionIsDue(user) {
   return Boolean(user?.deletionScheduledFor && user.deletionScheduledFor <= new Date());
@@ -47,7 +68,11 @@ router.post('/register', registerLimit, async (req, res) => {
 });
 
 router.post('/login', loginLimit, async (req, res) => {
-  const { email, password } = z.object({ email: z.string().email(), password: z.string().max(72).refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be 72 bytes or fewer.') }).parse(req.body);
+  const { email, password, totpCode } = z.object({
+    email: z.string().email(),
+    password: z.string().max(72).refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be 72 bytes or fewer.'),
+    totpCode: z.string().max(6).optional(),
+  }).parse(req.body);
   const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
   if (!user) return res.status(404).json({ code: 'ACCOUNT_NOT_FOUND', message: 'No account found for this email.' });
   if (!user.password)
@@ -58,14 +83,15 @@ router.post('/login', loginLimit, async (req, res) => {
     await finalizeAccountDeletion(user._id);
     return res.status(410).json({ message: 'The scheduled account deletion has taken effect.' });
   }
+  if (!requireAdminTotp(user, totpCode, res)) return;
   res.json({ token: sign(user), user: pub(user) });
 });
 
-router.post('/google', async (req, res) => {
+router.post('/google', googleLimit, async (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) return res.status(503).json({ message: 'Google sign-in is not configured yet.' });
 
-  const { credential } = z.object({ credential: z.string().min(1).max(10000) }).parse(req.body);
+  const { credential, totpCode } = z.object({ credential: z.string().min(1).max(10000), totpCode: z.string().max(6).optional() }).parse(req.body);
   let payload;
   try {
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: clientId });
@@ -87,6 +113,7 @@ router.post('/google', async (req, res) => {
       if (user.googleId && user.googleId !== payload.sub) {
         return res.status(409).json({ message: 'This email is linked to a different Google account. Please sign in with email and password.' });
       }
+      if (user.role === 'admin' && !requireAdminTotp(user, totpCode, res)) return;
       // A verified Google identity proves control of this email. Remove any unverified
       // password registration before linking so its creator cannot retain access.
       if (user.password) user.password = undefined;
@@ -113,6 +140,7 @@ router.post('/google', async (req, res) => {
     await finalizeAccountDeletion(user._id);
     return res.status(410).json({ message: 'The scheduled account deletion has taken effect.' });
   }
+  if (!requireAdminTotp(user, totpCode, res)) return;
   res.status(created ? 201 : 200).json({ token: sign(user), user: pub(user) });
 });
 

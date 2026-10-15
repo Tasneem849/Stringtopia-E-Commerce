@@ -12,6 +12,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: NODE_ENV
+        value: production
       - key: CURRENCY
         value: EGP
       - key: JWT_SECRET
@@ -23,6 +25,12 @@ services:
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_TOTP_SECRET
+        sync: false
+      - key: RATE_LIMIT_PROXY_SECRET
+        sync: false
+      - key: PAYMOB_API_KEY
         sync: false
       - key: PICKUP_ADDRESS
         sync: false

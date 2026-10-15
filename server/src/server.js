@@ -6,11 +6,20 @@ import { sweepAccountDeletions } from './accountDeletion.js';
 import { app } from './app.js';
 
 // Fail fast with a clear message instead of failing later in strange ways
-for (const key of ['MONGO_URI', 'JWT_SECRET', 'CLIENT_URL']) {
+const requiredEnvironment = ['MONGO_URI', 'JWT_SECRET', 'CLIENT_URL'];
+if (process.env.NODE_ENV === 'production') requiredEnvironment.push('RATE_LIMIT_PROXY_SECRET');
+for (const key of requiredEnvironment) {
   if (!process.env[key]) throw new Error(`Missing environment variable: ${key}`);
+}
+if (process.env.NODE_ENV === 'production' && process.env.RATE_LIMIT_PROXY_SECRET.length < 32) {
+  throw new Error('RATE_LIMIT_PROXY_SECRET must contain at least 32 characters.');
 }
 
 await mongoose.connect(process.env.MONGO_URI);
+
+if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_TOTP_SECRET) {
+  console.error('ADMIN_TOTP_SECRET is missing; production admin sign-in will remain locked until it is configured.');
+}
 
 // First boot: create the admin account from ADMIN_EMAIL / ADMIN_PASSWORD if there is none yet
 if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD && !(await User.exists({ role: 'admin' }))) {

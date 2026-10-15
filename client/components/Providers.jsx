@@ -6,9 +6,11 @@ const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
 export const cartLineKey = (item) => JSON.stringify([String(item.productId), item.variant || '']);
 const GUEST = { token: null, user: null };
+// Compatibility flag for existing components; the bearer credential stays in an HttpOnly cookie.
+const COOKIE_SESSION = 'http-only-session';
 
-// Auth + cart state, persisted in localStorage.
-export default function Providers({ children }) {
+// Cart state is persisted locally; auth credentials stay in the server-set HttpOnly cookie.
+export default function Providers({ children, cspNonce = '' }) {
   const [auth, setAuth] = useState(GUEST);
   const [cart, setCart] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -21,20 +23,45 @@ export default function Providers({ children }) {
   authRef.current = auth;
 
   useEffect(() => {
-    try {
-      setAuth(JSON.parse(localStorage.getItem('st_auth')) || GUEST);
-      setCart(JSON.parse(localStorage.getItem('st_cart')) || []);
-    } catch {}
-    setReady(true);
+    let active = true;
+    try { setCart(JSON.parse(localStorage.getItem('st_cart')) || []); } catch { setCart([]); }
+    let legacySession = null;
+    try { legacySession = JSON.parse(localStorage.getItem('st_auth') || 'null'); } catch {}
+    localStorage.removeItem('st_auth');
+
+    const restoreSession = async () => {
+      try {
+        let response;
+        if (legacySession?.token) {
+          response = await fetch('/api/session', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ action: 'exchange', token: legacySession.token }),
+          });
+          if (!response.ok) response = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store' });
+        } else {
+          response = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store' });
+        }
+        const data = await response.json().catch(() => ({}));
+        if (active) setAuth(data.user ? { token: COOKIE_SESSION, user: data.user } : GUEST);
+      } catch {
+        if (active) setAuth(GUEST);
+      } finally {
+        if (active) setReady(true);
+      }
+    };
+    void restoreSession();
     api('/config').then(setConfig).catch(() => {});
+    return () => { active = false; };
   }, []);
-  useEffect(() => { if (ready) localStorage.setItem('st_auth', JSON.stringify(auth)); }, [auth, ready]);
   useEffect(() => { if (ready) localStorage.setItem('st_cart', JSON.stringify(cart)); }, [cart, ready]);
   useEffect(() => {
     const handleExpiredSession = (event) => {
       if (!event.detail?.token || authRef.current.token !== event.detail.token) return;
       authRef.current = GUEST;
       setAuth(GUEST);
+      void fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
       setFavorites([]);
       setFavoritesLoading(false);
       setFavoritesError('');
@@ -204,15 +231,18 @@ export default function Providers({ children }) {
     setFavoritesError('');
   };
   const login = (session) => {
-    authRef.current = session;
+    const nextSession = session?.user ? { token: COOKIE_SESSION, user: session.user } : GUEST;
+    authRef.current = nextSession;
     setFavorites([]);
-    setFavoritesLoading(Boolean(session?.token));
+    setFavoritesLoading(Boolean(session?.user));
     setFavoritesError('');
-    setAuth(session);
+    setAuth(nextSession);
+    return nextSession;
   };
   const logout = () => {
     authRef.current = GUEST;
     setAuth(GUEST);
+    void fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
     setFavorites([]);
     setFavoritesLoading(false);
     setFavoritesError('');
@@ -221,7 +251,7 @@ export default function Providers({ children }) {
   const value = {
     ...auth, ready, config, refreshConfig, cart, addToCart, setQty, setVariant, removeItem,
     favorites, favoritesLoading, favoritesError, isFavorite, toggleFavorite,
-    login, logout, clearCart: () => setCart([]),
+    login, logout, cspNonce, clearCart: () => setCart([]),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

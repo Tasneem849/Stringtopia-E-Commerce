@@ -1,5 +1,3 @@
-import { API } from '@/lib/api';
-
 export function describeAuthError(error, mode) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return {
@@ -18,32 +16,19 @@ export function describeAuthError(error, mode) {
   }
 
   if (!error?.status && error?.name === 'TypeError') {
-    let apiUrl;
-    try { apiUrl = new URL(API); } catch {}
-
     const localHosts = ['localhost', '127.0.0.1', '::1'];
-    const isLocalApi = apiUrl && localHosts.includes(apiUrl.hostname);
-    const isHostedPage = typeof window !== 'undefined' && !localHosts.includes(window.location.hostname);
-
-    if (isLocalApi && isHostedPage) {
+    const localSite = typeof window !== 'undefined' && localHosts.includes(window.location.hostname);
+    if (localSite) {
       return {
-        title: 'The sign-in service is configured for a local computer',
-        message: `This store is hosted at ${window.location.host}, but its API address is ${apiUrl.origin}. Set NEXT_PUBLIC_API_URL to the deployed API’s public URL ending in /api in your client hosting settings, then redeploy.`,
-        retryable: false,
-      };
-    }
-
-    if (isLocalApi) {
-      return {
-        title: 'The local sign-in server did not respond',
-        message: `Stringtopia could not reach ${apiUrl.origin}. Check that the server is running from the server folder with npm run dev, then try again.`,
+        title: 'Could not connect to Stringtopia locally',
+        message: 'Stringtopia could not reach its local sign-in route. Make sure both the client and API are running, refresh the page, and try again.',
         retryable: true,
       };
     }
 
     return {
       title: 'Could not reach Stringtopia’s sign-in service',
-      message: `The browser received no response from ${apiUrl?.host || 'the configured API'}. Check your connection. If it still fails, the service may be offline or its address/CORS settings may need attention.`,
+      message: 'The sign-in request did not reach Stringtopia. Check your internet connection and try again. If this continues, contact Stringtopia support.',
       retryable: true,
     };
   }
@@ -72,6 +57,26 @@ export function describeAuthError(error, mode) {
       message: 'Choose Continue with Google to log in to this account.',
       retryable: false,
     };
+  }
+
+  if (error?.code === 'ADMIN_MFA_REQUIRED' || error?.code === 'ADMIN_MFA_INVALID') {
+    return {
+      title: error.code === 'ADMIN_MFA_INVALID' ? 'Check your authenticator code' : 'Administrator verification required',
+      message: error.message || 'Enter the current six-digit code from the shop administrator’s authenticator app.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'ADMIN_MFA_NOT_CONFIGURED') {
+    return {
+      title: 'Administrator sign-in is locked for setup',
+      message: error.message || 'The shop owner must add the authenticator secret in the API hosting settings before admin sign-in can continue.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'AUTH_SERVICE_UNAVAILABLE') {
+    return { title: 'Could not reach Stringtopia’s sign-in service', message: error.message, retryable: true };
   }
 
   if ((error?.code === 'INCORRECT_PASSWORD' || error?.status === 401) && mode === 'login') {

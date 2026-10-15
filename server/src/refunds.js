@@ -4,6 +4,28 @@ import { inquireTransactionById, refundTransaction } from './paymob.js';
 // Atomically claim one provider refund request. An ambiguous timeout remains processing so a
 // second admin click cannot accidentally issue a duplicate refund.
 export async function requestPaymobRefund(orderId, transactionId, amountCents) {
+  if (!process.env.PAYMOB_API_KEY) {
+    const needsSetup = await Order.findOneAndUpdate({
+      _id: orderId,
+      status: 'cancelled',
+      paymentMethod: 'paymob',
+      paymentStatus: 'paid',
+      paymobTransactionId: String(transactionId),
+      $or: [
+        { refundStatus: { $in: ['not_required', 'failed'] } },
+        { refundStatus: { $exists: false } },
+      ],
+    }, {
+      $set: {
+        refundStatus: 'failed',
+        refundAmount: Number(amountCents),
+        refundRequestedAt: new Date(),
+        refundError: 'Automatic refund is paused because PAYMOB_API_KEY is missing; configure the merchant API key and retry the refund.',
+      },
+    }, { new: true });
+    return needsSetup || Order.findById(orderId);
+  }
+
   const order = await Order.findOneAndUpdate({
     _id: orderId,
     status: 'cancelled',

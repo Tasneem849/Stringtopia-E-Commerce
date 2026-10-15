@@ -39,8 +39,7 @@ export default function BuyBox({ product: p }) {
       let t = token;
       if (!t) {
         const session = await api(`/auth/${mode}`, { method: 'POST', body: creds });
-        login(session);
-        t = session.token;
+        t = login(session).token;
       }
       await api('/orders/reserve', { token: t, method: 'POST', body: { items: [{ productId: p._id, qty, ...(variant ? { variant } : {}) }], note, delivery, customer } });
       router.push('/orders');

@@ -6,6 +6,7 @@ import PromoCode from '../models/PromoCode.js';
 import Product from '../models/Product.js';
 import SiteSettings from '../models/SiteSettings.js';
 import Expense from '../models/Expense.js';
+import AdminAuditLog from '../models/AdminAuditLog.js';
 import { mail } from '../email.js';
 import { requestPaymobRefund } from '../refunds.js';
 import { protect, adminOnly } from '../middleware/auth.js';
@@ -68,6 +69,23 @@ const cloudinaryAudioUrl = z.string().url().refine((value) => {
   return parsed.protocol === 'https:' && parsed.hostname === 'res.cloudinary.com' && parsed.pathname.includes('/video/upload/');
 }, 'Use a secure Cloudinary audio upload URL');
 
+function auditAdminMutation(req, res, next) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  res.once('finish', () => {
+    const route = req.route?.path
+      ? `${req.baseUrl}${req.route.path}`
+      : req.path.replace(/[a-f\d]{24}/gi, ':id');
+    void AdminAuditLog.create({
+      adminId: req.user.id,
+      method: req.method,
+      route,
+      status: res.statusCode,
+      requestId: req.requestId || 'unknown',
+    }).catch((error) => console.error('Could not write admin audit event:', error.message));
+  });
+  next();
+}
+
 const promoCodeInputSchema = z.discriminatedUnion('discountType', [
   z.object({
     code: z.string().trim().min(3).max(24).regex(/^[A-Za-z0-9_-]+$/),
@@ -88,7 +106,17 @@ const promoCodeInputSchema = z.discriminatedUnion('discountType', [
 ]);
 
 // Every endpoint in this namespace requires a valid admin session.
-router.use(protect, adminOnly);
+router.use(protect, adminOnly, auditAdminMutation);
+
+router.get('/audit-log', async (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 25, 1), 50);
+  const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+  const [events, total] = await Promise.all([
+    AdminAuditLog.find().populate('adminId', 'name').sort('-createdAt').skip((page - 1) * limit).limit(limit).lean(),
+    AdminAuditLog.countDocuments(),
+  ]);
+  res.json({ events, page, pages: Math.max(1, Math.ceil(total / limit)), total });
+});
 
 router.get('/orders', async (req, res) => {
   const filter = req.query.status ? { status: String(req.query.status) } : {};

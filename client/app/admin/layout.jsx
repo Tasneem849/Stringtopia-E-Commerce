@@ -22,6 +22,7 @@ export default function AdminLayout({ children }) {
         <Link className="nav-link" href="/admin/products">Products</Link>
         <Link className="nav-link" href="/admin/promos">Promo codes</Link>
         <Link className="nav-link" href="/admin/audio">Background audio</Link>
+        <Link className="nav-link" href="/admin/security">Security log</Link>
       </nav>
       {children}
     </>
