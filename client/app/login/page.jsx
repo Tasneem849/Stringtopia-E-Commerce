@@ -15,13 +15,46 @@ export default function Login() {
   const [f, setF] = useState({ email: '', password: '' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const set = (k) => (e) => {
+    setF((current) => ({ ...current, [k]: e.target.value }));
+    setErr(null);
+  };
 
   async function submitCredentials(submitMode = mode) {
+    const email = f.email.trim();
+    if (!email) {
+      setErr({ title: 'Enter your email address', message: 'Add the email address you want to use with Stringtopia.', retryable: false });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErr({ title: 'Check your email address', message: 'Enter a valid email address, such as name@example.com.', retryable: false });
+      return;
+    }
+    if (!f.password) {
+      setErr({ title: 'Enter your password', message: 'Type your password to continue.', retryable: false });
+      return;
+    }
+    if (new TextEncoder().encode(f.password).length > 72) {
+      setErr({
+        title: 'That password is too long',
+        message: 'Choose a shorter password. Some symbols and emoji count as more than one character.',
+        retryable: false,
+      });
+      return;
+    }
+    if (submitMode === 'register' && f.password.length < 8) {
+      setErr({
+        title: 'Choose a longer password',
+        message: 'Use at least 8 characters to create your Stringtopia account.',
+        retryable: false,
+      });
+      return;
+    }
+
     setBusy(true);
     setErr(null);
     try {
-      login(await api(`/auth/${submitMode}`, { method: 'POST', body: f, timeoutMs: 15000 }));
+      login(await api(`/auth/${submitMode}`, { method: 'POST', body: { ...f, email }, timeoutMs: 15000 }));
       router.replace(getPostLoginPath());
     } catch (error) {
       setErr(describeAuthError(error, submitMode));
@@ -42,11 +75,18 @@ export default function Login() {
 
   const input = 'field w-full';
   return (
-    <form onSubmit={submit} className="card mx-auto max-w-sm space-y-3">
+    <form onSubmit={submit} noValidate className="card mx-auto max-w-sm space-y-3">
       <h1 className="text-2xl font-bold">{mode === 'login' ? 'Log in' : 'Create account'}</h1>
-      <input type="email" placeholder="Email" value={f.email} onChange={set('email')} className={input} />
-      <input type="password" placeholder="Password (8+ characters)" value={f.password} onChange={set('password')} className={input} />
-      {err && <div role="alert" className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+      <input type="email" placeholder="Email" autoComplete="email" value={f.email} onChange={set('email')} className={input} />
+      <input
+        type="password"
+        placeholder={mode === 'register' ? 'Password (at least 8 characters)' : 'Password'}
+        autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+        value={f.password}
+        onChange={set('password')}
+        className={input}
+      />
+      {err && <div id="auth-error" role="alert" className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
         <p className="font-bold">{err.title}</p>
         <p>{err.message}</p>
         {err.action && <button type="button" className="cursor-pointer font-bold underline underline-offset-2" onClick={() => changeMode(err.action)}>

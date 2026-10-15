@@ -64,7 +64,7 @@ app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
 
   if (err.name === 'ZodError') {
-    return res.status(400).json({ message: 'Please check the submitted details and try again.', errors: err.flatten().fieldErrors });
+    return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Please check the submitted details and try again.', errors: err.flatten().fieldErrors });
   }
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ code: 'INVALID_REQUEST_BODY', message: 'We couldn’t read those details. Check the form and try again.' });

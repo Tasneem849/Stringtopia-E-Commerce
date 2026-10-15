@@ -19,6 +19,23 @@ function firstValidationMessage(errors) {
   return '';
 }
 
+function friendlyValidationMessage(path, errors) {
+  const first = firstValidationMessage(errors);
+  const passwordIssues = Array.isArray(errors?.password) ? errors.password.join(' ') : '';
+  const emailIssues = Array.isArray(errors?.email) ? errors.email.join(' ') : '';
+
+  if (/^\/auth\/register(?:\?|$)/.test(path) && /8|small|minimum/i.test(passwordIssues)) {
+    return 'Use a password with at least 8 characters.';
+  }
+  if (/^\/auth\/(?:register|login)(?:\?|$)/.test(path) && /72|long|byte/i.test(passwordIssues)) {
+    return 'That password is too long. Choose a shorter password, especially if it contains emoji or accented symbols.';
+  }
+  if (/^\/auth\/(?:register|login)(?:\?|$)/.test(path) && emailIssues) {
+    return 'Enter a valid email address and try again.';
+  }
+  return first;
+}
+
 function isOrderSubmission(path, method) {
   return method === 'POST' && /^\/orders\/checkout(?:\?|$)/.test(path);
 }
@@ -53,7 +70,7 @@ function transportError(cause, path, method) {
 }
 
 function messageForResponse(status, data, path, method) {
-  const validationMessage = firstValidationMessage(data?.errors);
+  const validationMessage = friendlyValidationMessage(path, data?.errors);
   if (status === 400 && validationMessage) return validationMessage;
   const serverMessage = data?.message || validationMessage;
 

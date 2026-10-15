@@ -59,8 +59,8 @@ export function describeAuthError(error, mode) {
 
   if ((error?.code === 'ACCOUNT_NOT_FOUND' || error?.status === 404) && mode === 'login') {
     return {
-      title: 'No account found for this email',
-      message: 'Check the spelling, or create a new account with this email address.',
+      title: 'We couldn’t find an account for that email',
+      message: 'Check the spelling, or create a Stringtopia account with this email address.',
       action: 'register',
       retryable: false,
     };
@@ -76,8 +76,16 @@ export function describeAuthError(error, mode) {
 
   if ((error?.code === 'INCORRECT_PASSWORD' || error?.status === 401) && mode === 'login') {
     return {
-      title: 'The password does not match this email',
-      message: error.message || 'Check your password and try again.',
+      title: 'That password doesn’t match',
+      message: 'Double-check your password and try again.',
+      retryable: false,
+    };
+  }
+
+  if (error?.status === 400 && /email address/i.test(error.message || '')) {
+    return {
+      title: 'Check your email address',
+      message: error.message,
       retryable: false,
     };
   }
