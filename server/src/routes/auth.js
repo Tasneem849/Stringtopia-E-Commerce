@@ -35,16 +35,25 @@ router.post('/register', registerLimit, async (req, res) => {
   }).parse(req.body);
   const existing = await User.findOne({ email: data.email.toLowerCase() }).select('deletionScheduledFor');
   if (existing && deletionIsDue(existing)) await finalizeAccountDeletion(existing._id);
-  else if (existing) return res.status(409).json({ message: 'Email already registered' });
-  const user = await User.create({ ...data, name: data.name || data.email.split('@')[0] });
+  else if (existing) return res.status(409).json({ code: 'EMAIL_ALREADY_REGISTERED', message: 'This email already has an account.' });
+  let user;
+  try {
+    user = await User.create({ ...data, name: data.name || data.email.split('@')[0] });
+  } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ code: 'EMAIL_ALREADY_REGISTERED', message: 'This email already has an account.' });
+    throw error;
+  }
   res.status(201).json({ token: sign(user), user: pub(user) });
 });
 
 router.post('/login', loginLimit, async (req, res) => {
   const { email, password } = z.object({ email: z.string().email(), password: z.string().max(72).refine((value) => Buffer.byteLength(value, 'utf8') <= 72, 'Password must be 72 bytes or fewer.') }).parse(req.body);
   const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-  if (!user?.password || !(await bcrypt.compare(password, user.password)))
-    return res.status(401).json({ message: 'Wrong email or password' });
+  if (!user) return res.status(404).json({ code: 'ACCOUNT_NOT_FOUND', message: 'No account found for this email.' });
+  if (!user.password)
+    return res.status(401).json({ code: 'GOOGLE_SIGN_IN_REQUIRED', message: 'This account uses Google sign-in. Choose Continue with Google to log in.' });
+  if (!(await bcrypt.compare(password, user.password)))
+    return res.status(401).json({ code: 'INCORRECT_PASSWORD', message: 'The password does not match this email. Please check it and try again.' });
   if (deletionIsDue(user)) {
     await finalizeAccountDeletion(user._id);
     return res.status(410).json({ message: 'The scheduled account deletion has taken effect.' });

@@ -20,6 +20,7 @@ export async function api(path, { token, method = 'GET', body, revalidate, timeo
   if (!res.ok) {
     const error = new Error(data?.message || Object.values(data?.errors || {}).flat()[0] || 'Something went wrong');
     error.status = res.status;
+    error.code = data?.code;
     if (res.status === 401 && token && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('stringtopia:auth-expired', { detail: { token } }));
     }
