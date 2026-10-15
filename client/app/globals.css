@@ -38,6 +38,24 @@
 .yarn-cycle > :nth-child(6n+6) { --pop: var(--color-butter); }
 
 @layer components {
+  .product-gallery-viewer { position: relative; }
+  .product-gallery-arrow {
+    position: absolute; top: 50%; z-index: 1; display: grid; width: clamp(2.4rem, 6vw, 2.8rem); height: clamp(2.4rem, 6vw, 2.8rem); place-items: center;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 18%, transparent); border-radius: 50%;
+    background: color-mix(in oklab, white 92%, var(--color-pink)); color: var(--color-ink);
+    box-shadow: 0 2px 10px color-mix(in oklab, var(--color-ink) 18%, transparent); cursor: pointer;
+    transform: translateY(-50%); transition: background-color .16s, color .16s, box-shadow .16s, transform .16s;
+  }
+  .product-gallery-arrow svg { width: 1.4rem; height: 1.4rem; }
+  .product-gallery-arrow:hover { transform: translateY(-50%) scale(1.08); background: var(--color-sun); color: var(--color-berry); box-shadow: 0 3px 12px color-mix(in oklab, var(--color-ink) 24%, transparent); }
+  .product-gallery-arrow-prev { left: .75rem; }
+  .product-gallery-arrow-next { right: .75rem; }
+  .product-gallery-count {
+    position: absolute; right: .75rem; bottom: .75rem; padding: .25rem .65rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 14%, transparent); border-radius: 999px;
+    background: color-mix(in oklab, white 90%, var(--color-pink)); color: var(--color-ink); font-size: .75rem; font-weight: 800;
+  }
+
   /* Buttons change color and tilt on hover, squish when pressed */
   .btn {
     display: inline-block; cursor: pointer; border: 2px solid transparent; border-radius: 999px;
@@ -113,6 +131,7 @@
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; }
   .btn:hover, .card-lift:hover, .pill:hover, .hero-art:hover { transform: none; }
+  .product-gallery-arrow:hover { transform: translateY(-50%); }
 }
 
 @layer components {
