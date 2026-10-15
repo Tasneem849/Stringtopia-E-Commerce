@@ -26,7 +26,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
       - run: npm test
 
   client:
@@ -42,5 +44,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
       - run: npm run build

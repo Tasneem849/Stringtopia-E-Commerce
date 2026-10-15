@@ -2,7 +2,7 @@
 
 Next.js (App Router) + Tailwind v4. Catalog and product pages are server-rendered for SEO.
 
-1. `npm install`
+1. `npm ci`
 2. `cp .env.local.example .env.local`
 3. Start the API (`../server`, port 5000), then `npm run dev` and open http://localhost:3000
 

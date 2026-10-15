@@ -1,4 +1,29 @@
-node_modules
-.next
+# Dependencies
+node_modules/
+
+# Next.js and build output
+.next/
+out/
+build/
+dist/
+.vercel/
+*.tsbuildinfo
+
+# Runtime, test, and temporary files
+coverage/
+tmp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment files and secrets. Keep example templates tracked.
 .env
-.env.local
+.env.*
+!.env.example
+!.env.local.example
+
+# Operating-system files
+.DS_Store
+Thumbs.db

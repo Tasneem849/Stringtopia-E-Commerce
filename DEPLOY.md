@@ -1,58 +1,79 @@
-# Deploying Stringtopia
+# Deploy Stringtopia
 
-Three services, all with free plans: **MongoDB Atlas** (database), **Render** (API), **Vercel** (website).
-Choose **Frankfurt** for Atlas and Render, it is the closest to Egypt.
+## Deployment layout
 
-## 0. Before you start
-```bash
-cd server && npm install && npm test   # creates package-lock.json and runs the tests
-cd ../client && npm install && npm run build   # catches errors before Vercel does
-cd .. && git init && git add . && git commit -m "Stringtopia"
-# create an empty repository on github.com, then:
-git remote add origin https://github.com/YOUR-NAME/stringtopia.git
-git branch -M main && git push -u origin main
-```
-Commit the two `package-lock.json` files too, so every deploy installs the same versions.
+| Service | Purpose | Current provider |
+| --- | --- | --- |
+| Storefront | Next.js website | Vercel |
+| API | Express and Node.js | Render Blueprint in `render.yaml` |
+| Database | Products, accounts, and orders | MongoDB Atlas |
+| Media | Product photos and background audio | Cloudinary |
 
-## 1. Database: MongoDB Atlas
-1. Create a free **M0** cluster (AWS, Frankfurt).
-2. **Database Access**: add a user with a strong password (letters and numbers keep it simple).
-3. **Network Access**: add `0.0.0.0/0`. Render's free plan has no fixed IP, so the password is your protection.
-4. **Connect > Drivers**: copy the connection string and add the database name before the `?`:
-   `mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/stringtopia?retryWrites=true&w=majority`
+The live storefront is [https://stringtopia-e-commerece-xcye.vercel.app](https://stringtopia-e-commerece-xcye.vercel.app/). Replace this value if the project moves to a custom domain.
 
-## 2. API: Render
-1. **New > Blueprint**, pick your GitHub repo. Render reads `render.yaml`.
-2. Fill in the prompts: `MONGO_URI` (from step 1), `CLIENT_URL` (type `http://localhost:3000` for now),
-   `ADMIN_EMAIL`, `ADMIN_PASSWORD` (strong, you log in to /admin with it), `PICKUP_ADDRESS`,
-   `DELIVERY_FEE` (in piasters: `5000` = 50 EGP). Apply.
-3. When it is live, open `https://YOUR-SERVICE.onrender.com/api/health`. You should see `{"ok":true}`.
-4. **Environment** tab: add the rest, using the names in `server/.env.example`:
-   `PAYMOB_SECRET_KEY`, `PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_INTEGRATION_IDS`,
-   `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`,
-   `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `NOTIFY_EMAIL`.
-   (`API_URL` is not needed on Render: the service's own address is used automatically.)
+The Blueprint currently requests Render's Free compute plan for the API. Free services have sleep, usage, and availability limits; provider eligibility and billing rules can change. A provider may request card verification even when the selected service displays `$0/month`. A card on file may also be billed for paid resources or eligible usage overages. Review the plan and Billing page before proceeding. Vercel's Hobby plan is limited to personal, non-commercial use; a shop used for sales needs a plan that permits commercial use. See the providers' current [Render free-plan details](https://render.com/docs/free), [Render billing FAQ](https://render.com/docs/faq), and [Vercel fair-use guidelines](https://vercel.com/docs/limits/fair-use-guidelines).
 
-## 3. Website: Vercel
-1. **Add New > Project**, import the same repo.
+## 1. Prepare MongoDB Atlas
+
+1. Create a database/cluster for Stringtopia and a dedicated database user with a unique, strong password. Grant only the permissions needed for the Stringtopia database.
+2. Configure Atlas Network Access to allow connections from the API host. If you must allow `0.0.0.0/0`, protect the database with the dedicated restricted user and strong password; do not use an Atlas administrator account in the app.
+3. Copy the driver connection URI, URL-encode special characters in the username/password, and include the database name, for example:
+
+   ```text
+   mongodb+srv://USER:PASSWORD@cluster.example.mongodb.net/stringtopia?retryWrites=true&w=majority
+   ```
+
+Use a separate database for development and testing. Never point the test suite at live customer data.
+
+## 2. Deploy the API to Render
+
+1. In Render, create a Blueprint from this GitHub repository and select the `main` branch. Render reads `render.yaml`; its service root is `server` and its health check is `/api/health`.
+2. When prompted, provide:
+   - `MONGO_URI`: the Atlas URI from step 1.
+   - `CLIENT_URL`: `https://stringtopia-e-commerece-xcye.vercel.app` (no trailing slash). This is the browser origin allowed by API CORS and used in customer email links.
+   - `ADMIN_EMAIL` and `ADMIN_PASSWORD`: the initial admin credentials. On first startup only, the API creates an admin if the database has no admin account. Changing these environment values later does not change an existing account's password.
+   - `PICKUP_ADDRESS` and `DELIVERY_FEE` (in piasters; `5000` is 50 EGP).
+3. `JWT_SECRET` is generated by the Blueprint. Keep it private; replacing it signs out existing sessions.
+4. After the first deploy, open `https://YOUR-API.onrender.com/api/health`. A healthy response is `{"ok":true}`.
+5. In the API service's Environment settings, add the values you use from `server/.env.example`:
+   - Google: `GOOGLE_CLIENT_ID`.
+   - Paymob: `PAYMOB_SECRET_KEY`, `PAYMOB_PUBLIC_KEY`, `PAYMOB_HMAC_SECRET`, `PAYMOB_API_KEY`, and `PAYMOB_INTEGRATION_IDS`.
+   - InstaPay: `INSTAPAY_ADDRESS`, `INSTAPAY_ACCOUNT_NAME`, and `INSTAPAY_WHATSAPP`.
+   - Cloudinary: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+   - Email: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, and `NOTIFY_EMAIL`.
+
+`API_URL` is optional on Render: the API falls back to Render's `RENDER_EXTERNAL_URL` for Paymob callbacks. If you set `API_URL` yourself, use the API's public HTTPS origin without a trailing slash. Configure Paymob to send payment notifications to the API webhook path `/api/orders/webhook` if your Paymob dashboard requires an explicit callback URL.
+
+Only configure live payment credentials after completing a test transaction with the provider's test environment. Never put server secrets in Vercel's `NEXT_PUBLIC_` variables or in the repository.
+
+## 3. Deploy the storefront to Vercel
+
+1. Import this repository as a Vercel project.
 2. Set **Root Directory** to `client`.
-3. Add the environment variable `NEXT_PUBLIC_API_URL` = `https://YOUR-SERVICE.onrender.com/api`
-   (it must end in `/api`). Deploy. If you change it later, redeploy: it is baked in at build time.
+3. Add these environment variables:
 
-## 4. Connect them
-Back on Render, set `CLIENT_URL` to your Vercel address (no trailing slash). The service restarts.
-This controls CORS and the links in emails and Paymob redirects.
+   | Variable | Value |
+   | --- | --- |
+   | `NEXT_PUBLIC_API_URL` | `https://YOUR-API.onrender.com/api` |
+   | `NEXT_PUBLIC_SITE_URL` | `https://stringtopia-e-commerece-xcye.vercel.app` |
+   | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | The Google OAuth Web client ID |
+   | `NEXT_PUBLIC_CURRENCY` | `EGP` |
 
-## 5. Check everything
-- [ ] Log in at `/login` with your admin email, then open **Admin > Products** and add a product with photos.
-- [ ] Buy it as a guest, pay with a Paymob **test** card (numbers are in Paymob's docs), land on the thank-you page.
-- [ ] The order appears in **Admin > Orders**. Mark it shipped.
-- [ ] Set a product's stock to 0 and try a reservation: request, approve, pay.
-- [ ] When your Paymob account is activated, swap in the live keys and live integration IDs.
+4. Deploy. `NEXT_PUBLIC_` values are embedded into the frontend at build time, so redeploy after changing them.
 
-## Free-plan limits to know about
-- **Render free** sleeps after 15 minutes without visits. The next visit waits about a minute, and Paymob's
-  payment confirmations could arrive while it is asleep. Fine for a demo; for real sales use the paid
-  Starter plan (always on).
-- **Vercel's free (Hobby) plan** is for personal, non-commercial use. A real store needs their paid plan.
-- **Atlas M0** has 512 MB of storage, plenty for a small shop.
+## 4. Configure Google sign-in
+
+In Google Cloud Console, configure a Web application OAuth client. Add both `http://localhost` and `http://localhost:3000` for local development, plus `https://stringtopia-e-commerece-xcye.vercel.app` as an authorized JavaScript origin. Use the same client ID for Vercel's `NEXT_PUBLIC_GOOGLE_CLIENT_ID` and Render's `GOOGLE_CLIENT_ID`. Update all three places if the production domain changes.
+
+## 5. Verify production settings
+
+- [ ] `GET https://YOUR-API.onrender.com/api/health` returns `{"ok":true}`.
+- [ ] Vercel's API URL points to the Render service and ends in `/api`.
+- [ ] `CLIENT_URL` and the Google authorized origin match the production storefront exactly.
+- [ ] Admin sign-in works and the first admin account is protected by a unique password.
+- [ ] Product, category, image upload, order, and account flows work with production configuration.
+- [ ] Test Paymob payment and callback handling before enabling live keys; verify InstaPay and cash-on-delivery instructions separately.
+- [ ] Confirm email delivery and inspect Render/Vercel usage and billing settings.
+- [ ] Confirm a database backup/restore plan before accepting real customer orders.
+
+See [server/.env.example](server/.env.example) and [client/.env.local.example](client/.env.local.example) for the complete local environment variable lists. Do not commit populated environment files.

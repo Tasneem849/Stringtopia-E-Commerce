@@ -3,7 +3,7 @@
 Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admin roles, email/password and Google sign-in), product catalog with search/filter/pagination, Paymob and InstaPay transfers, cash-on-delivery orders, and atomic stock updates.
 
 ## Run
-1. `npm install`
+1. `npm ci`
 2. `cp .env.example .env` and fill in values (MongoDB Atlas URI, Paymob test keys, and InstaPay account/WhatsApp details if enabled)
 3. `npm run seed` (creates admin + sample products), then `npm run dev`
 4. Payments locally: Paymob must reach your API, so expose it with a tunnel (e.g. `ngrok http 5000`) and set `API_URL` to that https address. Configure `PAYMOB_API_KEY` too so the expiry sweep and thank-you page can verify delayed callbacks.
