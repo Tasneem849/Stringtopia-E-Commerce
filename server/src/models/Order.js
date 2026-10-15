@@ -11,18 +11,29 @@ const schema = new mongoose.Schema({
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
     name: String,
     price: Number, // snapshot at purchase time
+    unitCost: { type: Number, select: false, validate: { validator: Number.isSafeInteger, message: 'Unit cost must be a whole number of piasters' } }, // admin-only cost snapshot in piasters
     qty: Number,
   }],
   total: Number,
   promoCode: { type: String, trim: true, uppercase: true },
   discountAmount: { type: Number, default: 0, min: 0 },
   promoUseHeld: { type: Boolean, default: false },
-  paymentMethod: { type: String, enum: ['paymob', 'instapay', 'cod'], default: 'paymob', index: true },
+  paymentMethod: { type: String, enum: ['paymob', 'instapay', 'cod', 'cash'], default: 'paymob', index: true },
   paymentStatus: { type: String, enum: ['unpaid', 'awaiting_confirmation', 'paid'], default: 'unpaid', index: true },
+  paidAt: Date,
+  orderSource: { type: String, enum: ['website', 'whatsapp', 'phone'], default: 'website', index: true },
   instaPayReference: { type: String, trim: true },
   paymobReference: { type: String, trim: true },
   paymobOrderId: { type: String, trim: true },
   paymobTransactionId: { type: String, trim: true },
+  refundStatus: { type: String, enum: ['not_required', 'processing', 'refunded', 'manual_required', 'failed'], default: 'not_required', index: true },
+  refundAmount: { type: Number, min: 0 }, // piasters; the full amount charged to the customer
+  refundRequestedAt: Date,
+  refundReconciliationCheckedAt: Date,
+  refundedAt: Date,
+  refundError: { type: String, maxlength: 300 },
+  paymobRefundTransactionId: { type: String, trim: true },
+  cancelledAt: Date,
   checkoutIpHash: { type: String, select: false },
   paymentReconciliationCheckedAt: Date,
   paymentIssueReportedAt: Date,
@@ -54,5 +65,6 @@ const schema = new mongoose.Schema({
 
 schema.index({ status: 1, createdAt: 1 });
 schema.index({ checkoutIpHash: 1, status: 1 });
+schema.index({ paymentStatus: 1, paidAt: 1, status: 1 });
 
 export default mongoose.model('Order', schema);

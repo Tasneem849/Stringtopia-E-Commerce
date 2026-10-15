@@ -10,8 +10,16 @@ export default function AdminOrder({ o, children }) {
         <strong className="capitalize">{o.status === 'out_for_delivery' ? 'Out for delivery' : o.status}</strong>
         <span className="text-stone-500">{new Date(o.createdAt).toLocaleString()}</span>
       </div>
-      <p>{o.user ? `${o.user.name} (${o.user.email})` : `Guest ${o.email || ''}`}{o.customer?.phone ? `, ${o.customer.phone}` : ''}</p>
-      <p><strong>Payment:</strong> {o.paymentMethod === 'cod' ? 'Cash on Delivery' : o.paymentMethod === 'instapay' ? 'InstaPay' : 'Paymob'}{o.paymentStatus === 'awaiting_confirmation' ? ' · awaiting confirmation' : o.paymentStatus === 'unpaid' ? ' · unpaid' : ''}</p>
+      <p>{o.user ? `${o.user.name} (${o.user.email})` : o.customer?.name || `Guest ${o.email || ''}`}{o.customer?.phone ? `, ${o.customer.phone}` : ''}</p>
+      {o.orderSource && o.orderSource !== 'website' && <p><strong>Source:</strong> {o.orderSource === 'whatsapp' ? 'WhatsApp' : 'Phone order'}</p>}
+      <p><strong>Payment:</strong> {o.paymentMethod === 'cod' ? 'Cash on Delivery' : o.paymentMethod === 'cash' ? 'Cash' : o.paymentMethod === 'instapay' ? 'InstaPay' : 'Paymob'}{o.paymentStatus === 'awaiting_confirmation' ? ' · awaiting confirmation' : o.paymentStatus === 'unpaid' ? ' · unpaid' : o.paymentStatus === 'paid' ? ' · paid' : ''}</p>
+      {o.refundStatus && o.refundStatus !== 'not_required' && <p className={o.refundStatus === 'failed' || o.refundStatus === 'manual_required' ? 'font-medium text-red-700' : 'font-medium text-emerald-700'}>
+        <strong>Refund:</strong>{' '}
+        {o.refundStatus === 'processing' ? `Full refund ${money(o.refundAmount || o.total)} submitted to Paymob; processing` :
+          o.refundStatus === 'refunded' ? `Full refund ${money(o.refundAmount || o.total)} confirmed${o.refundedAt ? ` · ${new Date(o.refundedAt).toLocaleString()}` : ''}` :
+            o.refundStatus === 'manual_required' ? `Manual full refund required · ${money(o.refundAmount || o.total)}` :
+              `Automatic refund failed${o.refundError ? ` · ${o.refundError}` : ''}`}
+      </p>}
       {o.instaPayReference && <p><strong>InstaPay transfer reference:</strong> {o.instaPayReference}</p>}
       {o.items.map((i) => <p key={i._id}>{i.qty} × {i.name}</p>)}
       {o.promoCode && o.discountAmount > 0 && <p><strong>Promo {o.promoCode}:</strong> saved {money(o.discountAmount)}</p>}

@@ -8,6 +8,7 @@ export const productSchema = z.object({
   description: z.string().optional(),
   price: z.number().int().min(0),
   salePrice: z.number().int().min(0).nullable().optional(),
+  unitCost: z.number().int().min(0).nullable().optional(),
   images: z.array(z.string().url().startsWith('https://')).max(6).optional(),
   category: z.string().trim().min(1).max(80).optional(),
   colors: z.array(z.string()).optional(),
@@ -18,7 +19,7 @@ const escapeRegExp = (value) =>
   [...value].map((character) => '.^$*+?()[]{}|\\'.includes(character) ? `\\${character}` : character).join('');
 
 // Shared public catalog query, also used by the admin product manager.
-export async function listProducts(req, res) {
+export async function listProducts(req, res, { includeUnitCost = false } = {}) {
   const { q, category, min, max, inStock, sort } = req.query;
   const limit = Math.min(+req.query.limit || 12, 50);
   const page = Math.max(+req.query.page || 1, 1);
@@ -47,16 +48,20 @@ export async function listProducts(req, res) {
   if (String(inStock).toLowerCase() === 'true') filter.stock = { $gt: 0 };
   const sortBy = ['price', '-price', '-createdAt'].includes(sort) ? sort : '-createdAt';
 
-  const productQuery = ['price', '-price'].includes(sort)
-    ? Product.aggregate([
+  let productQuery;
+  if (['price', '-price'].includes(sort)) {
+    productQuery = Product.aggregate([
       { $match: filter },
       { $addFields: { _effectivePrice: priceToUse } },
       { $sort: { _effectivePrice: sort === 'price' ? 1 : -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
-      { $project: { _effectivePrice: 0 } },
-    ])
-    : Product.find(filter).sort(sortBy).skip((page - 1) * limit).limit(limit);
+      { $project: { _effectivePrice: 0, ...(!includeUnitCost ? { unitCost: 0 } : {}) } },
+    ]);
+  } else {
+    productQuery = Product.find(filter).sort(sortBy).skip((page - 1) * limit).limit(limit);
+    if (includeUnitCost) productQuery.select('+unitCost');
+  }
   const [products, total] = await Promise.all([productQuery, Product.countDocuments(filter)]);
   res.json({ products, page, pages: Math.ceil(total / limit), total });
 }

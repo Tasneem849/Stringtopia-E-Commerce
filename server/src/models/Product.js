@@ -10,6 +10,7 @@ const schema = new mongoose.Schema({
     min: 0,
     validate: { validator(value) { return value == null || value < this.price; }, message: 'Sale price must be lower than regular price' },
   }, // optional discounted price in piasters
+  unitCost: { type: Number, min: 0, select: false, validate: { validator: Number.isSafeInteger, message: 'Unit cost must be a whole number of piasters' } }, // admin-only unit cost in piasters
   images: [String],
   category: { type: String, index: true },
   colors: [String],

@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, money } from '@/lib/api';
 import { useStore } from '@/components/Providers';
 import AdminOrder from '@/components/AdminOrder';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const STATUSES = ['pending', 'out_for_delivery', 'paid', 'shipped', 'approved', 'requested', 'declined', 'cancelled', 'expired'];
 
@@ -14,6 +15,9 @@ export default function AdminOrders() {
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState('');
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const load = () => api(`/admin/orders?status=${status}&page=${page}&limit=20`, { token }).then((result) => {
     setOrders(result.orders);
     setPage(result.page);
@@ -25,6 +29,38 @@ export default function AdminOrders() {
   async function orderAction(id, action) {
     await api(`/admin/orders/${id}/${action}`, { token, method: 'PATCH' }).catch((e) => setErr(e.message));
     load();
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    setCancelBusy(true);
+    setCancelError('');
+    setErr('');
+    try {
+      const result = await api(`/admin/orders/${cancelTarget._id}/cancel`, { token, method: 'PATCH' });
+      setCancelTarget(null);
+      if (result.refundStatus === 'failed') setErr(`Order cancelled, but Paymob could not start the refund. Use “Retry full refund” after checking the transaction in Paymob.`);
+      await load();
+    } catch (error) {
+      setCancelError(error.message);
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
+  function cancellationDescription(order) {
+    if (order.status === 'cancelled' && order.refundStatus === 'failed') {
+      return `The order is already cancelled. Retry the full Paymob refund of ${money(order.refundAmount || order.total)}.`;
+    }
+    if (order.paymentStatus === 'paid' && order.paymentMethod === 'paymob' && order.paymobTransactionId) {
+      return `This will cancel the order and immediately submit a full refund of ${money(order.total)} to Paymob. The bank or payment provider may take time to post the funds.`;
+    }
+    if (order.paymentStatus === 'paid' || (order.paymentMethod === 'instapay' && order.instaPayReference)) {
+      const payment = order.paymentMethod === 'instapay' ? 'InstaPay' : order.paymentMethod === 'cod' ? 'cash-on-delivery' : order.paymentMethod === 'cash' ? 'cash' : 'Paymob';
+      const detail = order.paymentStatus === 'paid' ? 'was recorded' : 'has a submitted transfer reference and needs verification';
+      return `This will cancel the order. The ${payment} payment ${detail}, so verify the payment and arrange a full refund of ${money(order.refundAmount || order.total)} manually outside the website.`;
+    }
+    return 'This will cancel the order and release any stock it is holding. No payment is currently marked as received.';
   }
 
   return (
@@ -52,8 +88,12 @@ export default function AdminOrders() {
               </button>
             </>
           )}
+          {order.status === 'pending' && order.paymentMethod === 'cash' && order.paymentStatus === 'unpaid' && (
+            <button onClick={() => orderAction(order._id, 'receive-cash')} className="btn btn-primary">Mark cash received</button>
+          )}
           {order.status === 'out_for_delivery' && order.paymentMethod === 'cod' && <button onClick={() => orderAction(order._id, 'complete-cod')} className="btn btn-primary">Mark delivered & cash received</button>}
-          {['requested', 'approved'].includes(order.status) || (order.status === 'pending' && ['instapay', 'cod'].includes(order.paymentMethod)) ? <button onClick={() => orderAction(order._id, 'cancel')} className="btn btn-ghost text-red-700">Cancel order</button> : null}
+          {order.status !== 'cancelled' && <button onClick={() => { setCancelTarget(order); setCancelError(''); }} className="btn btn-ghost text-red-700">Cancel order</button>}
+          {order.status === 'cancelled' && order.refundStatus === 'failed' && <button onClick={() => { setCancelTarget(order); setCancelError(''); }} className="btn btn-ghost text-red-700">Retry full refund</button>}
           {order.status === 'paid' && (
             <button onClick={() => orderAction(order._id, 'ship')} className="btn btn-primary">
               {order.delivery?.method === 'pickup' ? 'Mark ready for pickup' : 'Mark shipped'}
@@ -66,6 +106,18 @@ export default function AdminOrders() {
         <span>Page {page} of {pages} · {total} orders</span>
         <button type="button" className="cursor-pointer underline disabled:cursor-not-allowed disabled:text-stone-400" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Next →</button>
       </div>}
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title={cancelTarget?.status === 'cancelled' ? 'Retry the full refund?' : 'Cancel this order?'}
+        description={cancelTarget ? cancellationDescription(cancelTarget) : ''}
+        confirmLabel={cancelTarget?.status === 'cancelled' ? 'Retry full refund' : 'Cancel order'}
+        cancelLabel="Keep order"
+        busyLabel={cancelTarget?.status === 'cancelled' ? 'Requesting refund…' : 'Cancelling…'}
+        busy={cancelBusy}
+        error={cancelError}
+        onConfirm={confirmCancel}
+        onCancel={() => { if (!cancelBusy) { setCancelTarget(null); setCancelError(''); } }}
+      />
     </div>
   );
 }

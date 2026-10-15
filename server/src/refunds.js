@@ -1,0 +1,80 @@
+import Order from './models/Order.js';
+import { inquireTransactionById, refundTransaction } from './paymob.js';
+
+// Atomically claim one provider refund request. An ambiguous timeout remains processing so a
+// second admin click cannot accidentally issue a duplicate refund.
+export async function requestPaymobRefund(orderId, transactionId, amountCents) {
+  const order = await Order.findOneAndUpdate({
+    _id: orderId,
+    status: 'cancelled',
+    paymentMethod: 'paymob',
+    paymentStatus: 'paid',
+    paymobTransactionId: String(transactionId),
+    $or: [
+      { refundStatus: { $in: ['not_required', 'failed'] } },
+      { refundStatus: { $exists: false } },
+    ],
+  }, {
+    $set: {
+      refundStatus: 'processing',
+      refundAmount: Number(amountCents),
+      refundRequestedAt: new Date(),
+    },
+    $unset: { refundError: 1 },
+  }, { new: true });
+
+  if (!order) return Order.findById(orderId);
+
+  try {
+    const result = await refundTransaction(transactionId, amountCents);
+    const refundId = result.id ?? result.refund_id ?? result.transaction?.id;
+    if (refundId == null) return Order.findById(orderId);
+    return await Order.findOneAndUpdate(
+      { _id: orderId, refundStatus: 'processing' },
+      { paymobRefundTransactionId: String(refundId) },
+      { new: true },
+    ) || Order.findById(orderId);
+  } catch (error) {
+    if (!error.ambiguous) {
+      return await Order.findOneAndUpdate(
+        { _id: orderId, refundStatus: 'processing' },
+        { refundStatus: 'failed', refundError: String(error.message || 'Paymob rejected the refund').slice(0, 300) },
+        { new: true },
+      ) || Order.findById(orderId);
+    }
+    console.error(`Paymob refund status is uncertain for order ${orderId}:`, error.message);
+    return Order.findById(orderId);
+  }
+}
+
+export async function recordPaymobRefund(order, obj) {
+  if (!order || order.status !== 'cancelled' || order.refundStatus === 'refunded' || !process.env.PAYMOB_API_KEY) return null;
+  const transaction = await inquireTransactionById(order.paymobTransactionId);
+  const refundedAmount = Number(transaction?.refunded_amount_cents);
+  const requestedAmount = Number(order.refundAmount || order.total);
+  if (!Number.isFinite(refundedAmount) || refundedAmount < requestedAmount) return null;
+  const refunded = await Order.findOneAndUpdate({
+    _id: order._id,
+    status: 'cancelled',
+    $or: [
+      { refundStatus: { $in: ['processing', 'not_required', 'manual_required'] } },
+      { refundStatus: { $exists: false } },
+    ],
+  }, {
+    $set: {
+      refundStatus: 'refunded',
+      refundAmount: refundedAmount,
+      refundedAt: new Date(),
+      ...(obj.id != null && String(obj.id) !== String(order.paymobTransactionId)
+        ? { paymobRefundTransactionId: String(obj.id) }
+        : {}),
+    },
+    $unset: { refundError: 1 },
+  }, { new: true });
+  return refunded;
+}
+
+export async function reconcilePaymobRefund(order) {
+  if (!order || order.refundStatus !== 'processing' || !order.paymobTransactionId || !process.env.PAYMOB_API_KEY) return null;
+  return recordPaymobRefund(order, {});
+}

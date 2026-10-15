@@ -79,8 +79,35 @@ export const mail = {
   outForDelivery: (o) => notify(o.email, 'Your Stringtopia order is out for delivery',
     shell('Your order is on its way', `<p>Your crochet order is out for delivery. Please have the cash ready for the courier.</p>${items(o)}${where(o)}`,
       { url: orderLink(o), label: 'View my order' })),
-  cancelled: (o) => notify(o.email, 'Your Stringtopia order was cancelled',
-    shell('Order cancelled', `<p>Your order was cancelled by Stringtopia. Any held items have been returned to stock.</p>${items(o)}${where(o)}`,
+  cancelled: (o) => {
+    const refundMessage = o.refundStatus === 'refunded'
+      ? `<p>Your order was cancelled and a full refund of <b>${money(o.refundAmount || o.total)}</b> was confirmed. Your bank or payment provider may take time to post it.</p>`
+      : o.refundStatus === 'processing'
+        ? `<p>Your order was cancelled and a full refund of <b>${money(o.refundAmount || o.total)}</b> was submitted to Paymob. Your bank or payment provider may take time to post it.</p>`
+        : o.refundStatus === 'manual_required'
+          ? `<p>Your order was cancelled. A full refund of <b>${money(o.refundAmount || o.total)}</b> is due and will be arranged manually because this payment method does not support automatic refunds through checkout.</p>`
+          : o.refundStatus === 'failed'
+            ? `<p>Your order was cancelled, but the automatic refund request could not be completed. Stringtopia has been alerted and will arrange the full refund of <b>${money(o.refundAmount || o.total)}</b>.</p>`
+            : '<p>Your order was cancelled before payment was received. Any held items have been returned to stock.</p>';
+    notify(o.email, 'Your Stringtopia order was cancelled',
+      shell('Order cancelled', `${refundMessage}${items(o)}${where(o)}`,
+        { url: orderLink(o), label: 'View my order' }));
+  },
+
+  refunded: (o) => notify(o.email, 'Your Stringtopia refund was confirmed',
+    shell('Your refund is on its way', `<p>Paymob confirmed a full refund of <b>${money(o.refundAmount || o.total)}</b> for your cancelled order. Your bank or payment provider may take time to post it.</p>${items(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
+
+  refundSubmitted: (o) => notify(o.email, 'Your Stringtopia refund was submitted',
+    shell('Your refund is being processed', `<p>A full refund of <b>${money(o.refundAmount || o.total)}</b> was submitted to Paymob for your cancelled order. Your bank or payment provider may take time to post it.</p>${items(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
+
+  latePaymentRefund: (o) => notify(o.email, 'Payment received after order cancellation',
+    shell('We found a payment for your cancelled order', `<p>Paymob confirmed a payment of <b>${money(o.refundAmount || o.total)}</b> after the order was cancelled. A full refund was submitted automatically. Your bank or payment provider may take time to post it.</p>${items(o)}`,
+      { url: orderLink(o), label: 'View my order' })),
+
+  refundFailed: (o) => notify(o.email, 'We are arranging your Stringtopia refund',
+    shell('Your refund needs a little help', `<p>We cancelled your order, but could not submit the full refund of <b>${money(o.refundAmount || o.total)}</b> automatically. Stringtopia has been alerted and will arrange it for you.</p>${items(o)}`,
       { url: orderLink(o), label: 'View my order' })),
   approved: (o) => notify(o.email, 'Your reservation is approved',
     shell('Approved! We can make it for you',

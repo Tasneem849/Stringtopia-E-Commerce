@@ -17,6 +17,8 @@ export default function AdminLayout({ children }) {
       <nav className="mb-4 flex flex-wrap gap-4 border-b pb-2 font-medium">
         <Link className="nav-link" href="/admin">Reservation requests</Link>
         <Link className="nav-link" href="/admin/orders">Orders</Link>
+        <Link className="nav-link" href="/admin/orders/new">Add order</Link>
+        <Link className="nav-link" href="/admin/finance">Finance</Link>
         <Link className="nav-link" href="/admin/products">Products</Link>
         <Link className="nav-link" href="/admin/promos">Promo codes</Link>
         <Link className="nav-link" href="/admin/audio">Background audio</Link>

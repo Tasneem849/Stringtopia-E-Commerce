@@ -7,6 +7,7 @@ import PromoCode from '../models/PromoCode.js';
 import User from '../models/User.js';
 import { mail } from '../email.js';
 import { createCheckout, inquireTransactionByReference, isValidHmac } from '../paymob.js';
+import { requestPaymobRefund, recordPaymobRefund, reconcilePaymobRefund } from '../refunds.js';
 import { feeFor, sumTotal, toEgPhone } from '../pricing.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -51,12 +52,12 @@ const paymentMethodSchema = z.enum(['paymob', 'instapay', 'cod']).default('paymo
 // ---- stock helpers: in-stock items are HELD (decremented) the moment a direct checkout starts ----
 
 async function buildLines(items) {
-  const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } });
+  const products = await Product.find({ _id: { $in: items.map((i) => i.productId) } }).select('+unitCost');
   return items.map(({ productId, qty }) => {
     const p = products.find((x) => x.id === productId);
     if (!p) throw fail(404, 'Product not found');
     const price = Number.isFinite(p.salePrice) && p.salePrice >= 0 && p.salePrice < p.price ? p.salePrice : p.price;
-    return { product: p._id, name: p.name, price, qty }; // effective price from DB, never the client
+    return { product: p._id, name: p.name, price, ...(Number.isFinite(p.unitCost) ? { unitCost: p.unitCost } : {}), qty }; // snapshots from DB, never the client
   });
 }
 
@@ -228,7 +229,10 @@ router.post('/reserve', protect, async (req, res) => {
   });
   mail.requestReceived(order);
   mail.newRequest(order);
-  res.status(201).json(order);
+  res.status(201).json({
+    ...order.toObject(),
+    items: order.items.map(({ product, name, price, qty }) => ({ product, name, price, qty })),
+  });
 });
 
 router.post('/:id/cancel', protect, async (req, res) => {
@@ -261,7 +265,12 @@ router.post('/pay/:token', paymobRetryLimit, async (req, res) => {
 export async function webhook(req, res) {
   const { type, obj } = req.body || {};
   if (!isValidHmac(obj, req.query.hmac)) return res.status(401).send('Invalid signature');
-  if (type === 'TRANSACTION' && obj.success === true && obj.pending !== true && !obj.is_voided && !obj.is_refunded) {
+  if (type === 'TRANSACTION' && (obj.is_refunded === true || obj.is_refund === true)) {
+    const transactionIds = [obj.parent_transaction, obj.id].filter((id) => id != null).map(String);
+    const order = await Order.findOne({ status: 'cancelled', paymentMethod: 'paymob', paymobTransactionId: { $in: transactionIds } });
+    const updated = await recordPaymobRefund(order, obj);
+    if (updated) mail.refunded(updated);
+  } else if (type === 'TRANSACTION' && obj.success === true && obj.pending !== true && !obj.is_voided && !obj.is_refunded) {
     const orderId = String(obj.order?.merchant_order_id || '').split('-')[0]; // "<order id>-<attempt>"
     const transactionId = obj.id == null ? undefined : String(obj.id);
     const paymobOrderId = obj.order?.id == null ? undefined : String(obj.order.id);
@@ -277,23 +286,60 @@ export async function webhook(req, res) {
 async function settle(orderId, paidAmount, transactionId, paymobOrderId) {
   const order = await Order.findById(orderId);
   if (!order) return;
-  if (transactionId || paymobOrderId) {
-    await Order.updateOne({ _id: orderId }, {
-      ...(transactionId ? { paymobTransactionId: transactionId } : {}),
-      ...(paymobOrderId ? { paymobOrderId } : {}),
-    });
-  }
   if (order.paymentMethod && order.paymentMethod !== 'paymob') {
     return reportPaymentIssue(order, `Paymob sent a successful transaction (${transactionId || 'unknown transaction'}) for an order marked ${order.paymentMethod}. Verify the payment and resolve the order manually.`);
   }
+
+  // Cancellation wins over a late payment callback. Record the actual charge and send a full
+  // refund request instead of resurrecting a cancelled order as paid.
+  if (order.status === 'cancelled') {
+    const amount = Number(paidAmount);
+    if (!transactionId || !Number.isSafeInteger(amount) || amount <= 0) {
+      return reportPaymentIssue(order, 'Paymob confirmed payment after this order was cancelled, but the transaction details were incomplete. Verify the full charge and refund it in Paymob.');
+    }
+    const allowedRefundStatuses = ['not_required', 'manual_required'];
+    if (order.refundStatus === 'failed' && order.paymobTransactionId !== String(transactionId)) allowedRefundStatuses.push('failed');
+    const cancelledPayment = await Order.findOneAndUpdate({
+      _id: orderId,
+      status: 'cancelled',
+      paymentMethod: 'paymob',
+      $or: [
+        { refundStatus: { $in: allowedRefundStatuses } },
+        { refundStatus: { $exists: false } },
+      ],
+    }, {
+      $set: {
+        paymentStatus: 'paid',
+        paidAt: new Date(),
+        paymobTransactionId: String(transactionId),
+        ...(paymobOrderId ? { paymobOrderId: String(paymobOrderId) } : {}),
+        refundStatus: 'not_required',
+        refundAmount: amount,
+      },
+    }, { new: true });
+    if (!cancelledPayment) return;
+    const refund = await requestPaymobRefund(cancelledPayment._id, transactionId, amount);
+    if (refund?.refundStatus === 'failed') {
+      mail.problem(refund, `A full refund is due for this late Paymob payment, but the automatic refund request failed: ${refund.refundError || 'Paymob rejected the request.'}`);
+      mail.refundFailed(refund);
+    } else if (refund?.refundStatus === 'processing') {
+      mail.latePaymentRefund(refund);
+    }
+    return;
+  }
+
   if (paidAmount !== order.total) {
     return reportPaymentIssue(order, `Paymob transaction ${transactionId || 'unknown'} reports ${paidAmount} piasters, but this order total is ${order.total} piasters. Verify it in Paymob before fulfillment.`);
   }
   // Claim the order atomically so repeated callbacks can't process it twice. `prev` is the order as it was.
   const prev = await Order.findOneAndUpdate(
-    { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired', 'cancelled'] } },
-    { status: 'paid', paymentStatus: 'paid', paymobTransactionId: transactionId, paymobOrderId: paymobOrderId || order.paymobOrderId, promoUseHeld: false });
-  if (!prev) return;
+    { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired'] } },
+    { status: 'paid', paymentStatus: 'paid', paidAt: new Date(), paymobTransactionId: transactionId, paymobOrderId: paymobOrderId || order.paymobOrderId, promoUseHeld: false });
+  if (!prev) {
+    const current = await Order.findById(orderId);
+    if (current?.status === 'cancelled') return settle(orderId, paidAmount, transactionId, paymobOrderId);
+    return;
+  }
 
   if (prev.promoCode && !prev.promoUseHeld && ['expired', 'cancelled'].includes(prev.status)) {
     await PromoCode.updateOne({ code: prev.promoCode }, { $inc: { redemptionCount: 1 } });
@@ -361,6 +407,35 @@ export async function sweep() {
       }
     }
     await expire({ _id: o._id, status: o.status });
+  }
+
+  if (process.env.PAYMOB_API_KEY) {
+    const pendingRefunds = await Order.find({
+      status: 'cancelled', paymentMethod: 'paymob', refundStatus: 'processing',
+      paymobTransactionId: { $exists: true }, refundRequestedAt: { $lt: ago(60 * 1000) },
+      $or: [
+        { refundReconciliationCheckedAt: { $exists: false } },
+        { refundReconciliationCheckedAt: { $lt: ago(10 * 60 * 1000) } },
+      ],
+    }).sort('refundRequestedAt').limit(20);
+    for (const order of pendingRefunds) {
+      const checkedAt = new Date();
+      const checkFilter = {
+        _id: order._id,
+        refundStatus: 'processing',
+        ...(order.refundReconciliationCheckedAt
+          ? { refundReconciliationCheckedAt: order.refundReconciliationCheckedAt }
+          : { refundReconciliationCheckedAt: { $exists: false } }),
+      };
+      const claimed = await Order.findOneAndUpdate(checkFilter, { refundReconciliationCheckedAt: checkedAt }, { new: true });
+      if (!claimed) continue;
+      try {
+        const refunded = await reconcilePaymobRefund(claimed);
+        if (refunded) mail.refunded(refunded);
+      } catch (error) {
+        console.error(`Paymob refund reconciliation failed for order ${order.id}:`, error.message);
+      }
+    }
   }
 }
 

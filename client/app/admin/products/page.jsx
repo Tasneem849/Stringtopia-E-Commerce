@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, money } from '@/lib/api';
 import ProductPrice from '@/components/ProductPrice';
 import { useStore } from '@/components/Providers';
 import ImageUploader from '@/components/ImageUploader';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
-const BLANK = { id: null, name: '', price: '', salePrice: '', stock: '1', category: '', colors: '', images: [], description: '' };
+const BLANK = { id: null, name: '', price: '', salePrice: '', unitCost: '', stock: '1', category: '', colors: '', images: [], description: '' };
 const input = 'field w-full';
 
 export default function AdminProducts() {
@@ -122,13 +122,18 @@ export default function AdminProducts() {
     setErr('');
     const regularPrice = Math.round(parseFloat(f.price) * 100);
     const salePrice = f.salePrice === '' ? null : Math.round(parseFloat(f.salePrice) * 100);
+    const unitCost = f.unitCost === '' ? null : Math.round(parseFloat(f.unitCost) * 100);
     if (salePrice !== null && salePrice >= regularPrice) {
       setErr('Sale price must be lower than the regular price.');
       return;
     }
+    if (unitCost !== null && (!Number.isSafeInteger(unitCost) || unitCost < 0)) {
+      setErr('Enter a valid product cost, or leave it blank if unknown.');
+      return;
+    }
     const body = {
       name: f.name, description: f.description, category: f.category || undefined,
-      price: regularPrice, salePrice,
+      price: regularPrice, salePrice, unitCost,
       ...(f.id ? {} : { stock: parseInt(f.stock, 10) }),
       colors: f.colors.split(',').map((c) => c.trim()).filter(Boolean),
       images: f.images,
@@ -146,7 +151,7 @@ export default function AdminProducts() {
 
   const edit = (p) => {
     setF({
-      id: p._id, name: p.name, price: (p.price / 100).toFixed(2), salePrice: p.salePrice != null ? (p.salePrice / 100).toFixed(2) : '', stock: String(p.stock), category: categories.find((category) => category.name.toLocaleLowerCase() === (p.category || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase())?.name || '',
+      id: p._id, name: p.name, price: (p.price / 100).toFixed(2), salePrice: p.salePrice != null ? (p.salePrice / 100).toFixed(2) : '', unitCost: Number.isFinite(p.unitCost) ? (p.unitCost / 100).toFixed(2) : '', stock: String(p.stock), category: categories.find((category) => category.name.toLocaleLowerCase() === (p.category || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase())?.name || '',
       colors: (p.colors || []).join(', '), images: p.images || [], description: p.description || '',
     });
     setErr('');
@@ -225,9 +230,10 @@ export default function AdminProducts() {
       <form onSubmit={save} className="space-y-3 card">
         <h2 className="font-semibold">{f.id ? 'Edit product' : 'Add product'}</h2>
         <input required placeholder="Name" {...bind('name')} className={input} />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <input required type="number" step="0.01" min="0" placeholder="Regular price (EGP)" {...bind('price')} className={input} />
           <input aria-label="Sale price in EGP (optional)" type="number" step="0.01" min="0" placeholder="Sale price (optional)" {...bind('salePrice')} className={input} />
+          <input aria-label="Unit cost in EGP (optional)" type="number" step="0.01" min="0" placeholder="Unit cost (for profit)" {...bind('unitCost')} className={input} />
           <label className="space-y-1">
             <input required type="number" min="0" placeholder="Stock" {...bind('stock')} disabled={Boolean(f.id)} className={input} />
             {f.id && <span className="block text-xs text-stone-500">Adjust existing stock from Manage products.</span>}
@@ -313,7 +319,7 @@ export default function AdminProducts() {
             <div>
               <p className="font-medium">{p.name}</p>
               <p className="text-sm text-stone-600">
-                <ProductPrice product={p} /> · {p.stock > 0 ? p.stock + ' in stock' : 'Sold out (reservations only)'}
+                <ProductPrice product={p} /> · {p.stock > 0 ? p.stock + ' in stock' : 'Sold out (reservations only)'}{Number.isFinite(p.unitCost) ? ` · Cost ${money(p.unitCost)}` : ' · Cost not set'}
               </p>
             </div>
             <div className="flex gap-3 text-sm">

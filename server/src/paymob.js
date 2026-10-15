@@ -58,6 +58,55 @@ export async function inquireTransactionByReference(reference) {
   return data;
 }
 
+export async function inquireTransactionById(transactionId) {
+  const apiKey = process.env.PAYMOB_API_KEY;
+  if (!apiKey || !transactionId) return null;
+  const authToken = await getInquiryToken(apiKey);
+  const response = await fetch(`https://accept.paymob.com/api/acceptance/transactions/${encodeURIComponent(transactionId)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 404) return null;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.id == null) throw new Error(`Paymob transaction inquiry failed with status ${response.status}`);
+  return data;
+}
+
+// Requests a refund for the full amount (in piasters) against a successful Paymob transaction.
+// A timeout or server error is ambiguous: Paymob may have accepted the request, so callers must
+// keep it in a processing state and reconcile it before attempting another refund.
+export async function refundTransaction(transactionId, amountCents) {
+  const secretKey = process.env.PAYMOB_SECRET_KEY;
+  if (!secretKey) throw Object.assign(new Error('Paymob refunds are not configured'), { definitive: true });
+  if (!transactionId || !Number.isSafeInteger(Number(amountCents)) || Number(amountCents) <= 0)
+    throw Object.assign(new Error('A Paymob transaction and a positive refund amount are required'), { definitive: true });
+
+  let response;
+  try {
+    const baseUrl = (process.env.PAYMOB_BASE_URL || 'https://accept.paymob.com').replace(/\/$/, '');
+    response = await fetch(`${baseUrl}/api/acceptance/void_refund/refund`, {
+      method: 'POST',
+      headers: { Authorization: `Token ${secretKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction_id: transactionId, amount_cents: Number(amountCents) }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    throw Object.assign(new Error('Paymob refund request ended without a confirmed response'), { ambiguous: true, cause: error });
+  }
+  const data = await response.json().catch(() => ({}));
+  if (response.ok && (data.success === false || data.error)) {
+    throw Object.assign(new Error(data.message || data.detail || 'Paymob rejected the refund request'), { definitive: true });
+  }
+  if (!response.ok) {
+    const definitive = response.status >= 400 && response.status < 500 && response.status !== 408;
+    throw Object.assign(new Error(data.message || data.detail || `Paymob refund request failed (${response.status})`), {
+      ambiguous: !definitive,
+      definitive,
+    });
+  }
+  return data;
+}
+
 // Creates a payment and returns the Paymob checkout address to send the customer to.
 export async function createCheckout(order, attempt) {
   const { PAYMOB_SECRET_KEY, PAYMOB_PUBLIC_KEY, PAYMOB_INTEGRATION_IDS, CLIENT_URL } = process.env;
