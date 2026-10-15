@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, friendlyErrorMessage } from '@/lib/api';
 import { useStore } from '@/components/Providers';
 
 const MAX_AUDIO_MB = 20;
@@ -55,16 +55,16 @@ export default function BackgroundAudioSettings() {
         method: 'POST',
         body: form,
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error?.message || 'Audio upload failed.');
-      if (!result.secure_url) throw new Error('Cloudinary did not return a secure audio URL.');
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error?.message || 'The audio service could not accept this upload. Please try again.');
+      if (!result?.secure_url) throw new Error('The audio service did not return a usable file link. Please try again.');
 
       await api('/admin/settings/audio', { token, method: 'PUT', body: { url: result.secure_url } });
       setAudioUrl(result.secure_url);
       await refreshConfig();
       setNotice('Background audio updated. It now loops for all visitors.');
     } catch (e) {
-      setError(e.message || 'Could not upload the audio.');
+      setError(friendlyErrorMessage(e, 'Could not upload the audio. Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -80,7 +80,7 @@ export default function BackgroundAudioSettings() {
       await refreshConfig();
       setNotice('Background audio has been removed from the site.');
     } catch (e) {
-      setError(e.message || 'Could not remove the background audio.');
+      setError(friendlyErrorMessage(e, 'Could not remove the background audio. Please try again.'));
     } finally {
       setBusy(false);
     }

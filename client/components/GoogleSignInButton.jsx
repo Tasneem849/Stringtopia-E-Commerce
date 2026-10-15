@@ -73,9 +73,10 @@ function describeGoogleError(error) {
   }
 
   if (error?.status >= 500) {
+    const reference = error.requestId ? ` Share this reference with Stringtopia support: ${error.requestId}.` : '';
     return {
       title: 'Stringtopia is having a temporary problem',
-      message: 'Please try Google sign-in again in a moment. If this keeps happening, contact Stringtopia support.',
+      message: `Please try Google sign-in again in a moment. If this keeps happening, contact Stringtopia support.${reference}`,
       retryable: true,
     };
   }

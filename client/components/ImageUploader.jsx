@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api, img } from '@/lib/api';
+import { api, friendlyErrorMessage, img } from '@/lib/api';
 import { useStore } from './Providers';
 
 const MAX_MB = 5;
@@ -30,13 +30,14 @@ export default function ImageUploader({ images, onChange }) {
         form.append('folder', s.folder);
         form.append('signature', s.signature);
         const res = await fetch(`https://api.cloudinary.com/v1_1/${s.cloudName}/image/upload`, { method: 'POST', body: form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error?.message || 'The photo service could not accept this upload. Please try again.');
+        if (!data?.secure_url) throw new Error('The photo uploaded without a usable image link. Please try again.');
         list = [...list, data.secure_url];
         onChange(list); // each photo appears as soon as it lands
       }
     } catch (e) {
-      setErr(e.message);
+      setErr(friendlyErrorMessage(e, 'Could not upload the photo. Please try again.'));
     }
     setBusy(false);
   }
