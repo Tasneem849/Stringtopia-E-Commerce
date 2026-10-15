@@ -1,4 +1,5 @@
 import './globals.css';
+import Link from 'next/link';
 import { Gaegu, Figtree } from 'next/font/google';
 import Providers from '@/components/Providers';
 import Header from '@/components/Header';
@@ -25,6 +26,9 @@ export default function RootLayout({ children }) {
           <main className="mx-auto max-w-5xl p-4 md:p-6">{children}</main>
           <footer className="mt-12 border-t-2 border-dashed border-ink/20 p-6 text-center text-sm">
             <p>Handmade with love by Stringtopia.</p>
+            <p className="mt-2 text-stone-600">© {new Date().getFullYear()} Stringtopia. All rights reserved.{' '}
+              <Link href="/asset-rights" className="font-medium text-yarn underline underline-offset-2 hover:text-ink">Asset &amp; usage rights</Link>
+            </p>
             <nav aria-label="Stringtopia social media" className="mt-4 flex justify-center gap-3">
               <a
                 href="https://www.facebook.com/StringTopia/"
