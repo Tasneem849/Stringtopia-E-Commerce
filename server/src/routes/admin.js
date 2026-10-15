@@ -245,6 +245,7 @@ router.post('/orders/:id/decline', async (req, res) => {
 });
 
 router.patch('/orders/:id/cancel', async (req, res) => {
+  const { reason } = z.object({ reason: z.string().trim().max(300).optional() }).parse(req.body ?? {});
   let previous = null;
   let cancelled = null;
   let madeCancellation = false;
@@ -283,6 +284,7 @@ router.patch('/orders/:id/cancel', async (req, res) => {
         stockHeld: false,
         refundStatus,
         ...(needsManualPaymentReview ? { refundAmount: current.total } : {}),
+        ...(reason ? { cancellationReason: reason } : {}),
         cancelledAt: new Date(),
       },
     }, { new: false });

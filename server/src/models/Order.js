@@ -45,6 +45,7 @@ const schema = new mongoose.Schema({
   },
   note: String,          // customer's message with a reservation request
   declineReason: String, // seller's message when declining
+  cancellationReason: { type: String, trim: true, maxlength: 300 }, // optional admin explanation shared with the customer
   expiresAt: Date,       // deadline to pay after approval
   eta: String,           // seller's estimate, e.g. "ready in 2 weeks"
   stockHeld: { type: Boolean, default: false }, // true for direct checkout

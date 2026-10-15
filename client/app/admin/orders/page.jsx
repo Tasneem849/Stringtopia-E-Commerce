@@ -5,7 +5,7 @@ import { useStore } from '@/components/Providers';
 import AdminOrder from '@/components/AdminOrder';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
-const STATUSES = ['pending', 'out_for_delivery', 'paid', 'shipped', 'approved', 'requested', 'declined', 'cancelled', 'expired'];
+const STATUSES = ['all', 'pending', 'out_for_delivery', 'paid', 'shipped', 'approved', 'requested', 'declined', 'cancelled', 'expired'];
 
 export default function AdminOrders() {
   const { token } = useStore();
@@ -16,14 +16,19 @@ export default function AdminOrders() {
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const load = () => api(`/admin/orders?status=${status}&page=${page}&limit=20`, { token }).then((result) => {
-    setOrders(result.orders);
-    setPage(result.page);
-    setPages(result.pages);
-    setTotal(result.total);
-  }).catch((e) => setErr(e.message));
+  const load = () => {
+    const query = new URLSearchParams({ page: String(page), limit: '20' });
+    if (status !== 'all') query.set('status', status);
+    return api(`/admin/orders?${query}`, { token }).then((result) => {
+      setOrders(result.orders);
+      setPage(result.page);
+      setPages(result.pages);
+      setTotal(result.total);
+    }).catch((e) => setErr(e.message));
+  };
   useEffect(() => { if (token) load(); }, [token, status, page]);
 
   async function orderAction(id, action) {
@@ -37,8 +42,13 @@ export default function AdminOrders() {
     setCancelError('');
     setErr('');
     try {
-      const result = await api(`/admin/orders/${cancelTarget._id}/cancel`, { token, method: 'PATCH' });
+      const result = await api(`/admin/orders/${cancelTarget._id}/cancel`, {
+        token,
+        method: 'PATCH',
+        body: cancelTarget.status === 'cancelled' ? undefined : { reason: cancelReason.trim() },
+      });
       setCancelTarget(null);
+      setCancelReason('');
       if (result.refundStatus === 'failed') setErr(`Order cancelled, but Paymob could not start the refund. Use “Retry full refund” after checking the transaction in Paymob.`);
       await load();
     } catch (error) {
@@ -71,7 +81,7 @@ export default function AdminOrders() {
           value={status} className="field capitalize"
           onChange={(e) => { setOrders(null); setPage(1); setStatus(e.target.value); }}
         >
-          {STATUSES.map((item) => <option key={item}>{item}</option>)}
+          {STATUSES.map((item) => <option key={item} value={item}>{item === 'all' ? 'All orders' : item}</option>)}
         </select>
       </div>
       {err && <p className="text-red-700">{err}</p>}
@@ -92,8 +102,8 @@ export default function AdminOrders() {
             <button onClick={() => orderAction(order._id, 'receive-cash')} className="btn btn-primary">Mark cash received</button>
           )}
           {order.status === 'out_for_delivery' && order.paymentMethod === 'cod' && <button onClick={() => orderAction(order._id, 'complete-cod')} className="btn btn-primary">Mark delivered & cash received</button>}
-          {order.status !== 'cancelled' && <button onClick={() => { setCancelTarget(order); setCancelError(''); }} className="btn btn-ghost text-red-700">Cancel order</button>}
-          {order.status === 'cancelled' && order.refundStatus === 'failed' && <button onClick={() => { setCancelTarget(order); setCancelError(''); }} className="btn btn-ghost text-red-700">Retry full refund</button>}
+          {order.status !== 'cancelled' && <button onClick={() => { setCancelTarget(order); setCancelReason(''); setCancelError(''); }} className="btn btn-ghost text-red-700">Cancel order</button>}
+          {order.status === 'cancelled' && order.refundStatus === 'failed' && <button onClick={() => { setCancelTarget(order); setCancelReason(''); setCancelError(''); }} className="btn btn-ghost text-red-700">Retry full refund</button>}
           {order.status === 'paid' && (
             <button onClick={() => orderAction(order._id, 'ship')} className="btn btn-primary">
               {order.delivery?.method === 'pickup' ? 'Mark ready for pickup' : 'Mark shipped'}
@@ -113,10 +123,17 @@ export default function AdminOrders() {
         confirmLabel={cancelTarget?.status === 'cancelled' ? 'Retry full refund' : 'Cancel order'}
         cancelLabel="Keep order"
         busyLabel={cancelTarget?.status === 'cancelled' ? 'Requesting refund…' : 'Cancelling…'}
+        inputLabel={cancelTarget?.status === 'cancelled' ? undefined : 'Cancellation reason (optional)'}
+        inputType="textarea"
+        inputHint={cancelTarget?.status === 'cancelled' ? undefined : 'This will be included in the customer’s cancellation email. Optional, up to 300 characters.'}
+        inputValue={cancelReason}
+        inputPlaceholder="Add a short explanation, if helpful"
+        inputMaxLength={300}
+        onInputChange={setCancelReason}
         busy={cancelBusy}
         error={cancelError}
         onConfirm={confirmCancel}
-        onCancel={() => { if (!cancelBusy) { setCancelTarget(null); setCancelError(''); } }}
+        onCancel={() => { if (!cancelBusy) { setCancelTarget(null); setCancelReason(''); setCancelError(''); } }}
       />
     </div>
   );

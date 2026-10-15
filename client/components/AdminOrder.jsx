@@ -36,7 +36,8 @@ export default function AdminOrder({ o, children }) {
       )}
       {d.giftMessage && <p>Card message: {d.giftMessage}</p>}
       {o.note && <p>Customer note: {o.note}</p>}
-      {children}
+      {o.cancellationReason && <p><strong>Cancellation reason:</strong> {o.cancellationReason}</p>}
+      <div className="flex flex-wrap items-center gap-2 pt-2">{children}</div>
     </div>
   );
 }

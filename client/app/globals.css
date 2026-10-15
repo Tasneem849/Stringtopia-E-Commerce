@@ -39,6 +39,15 @@
 
 @layer components {
   .product-gallery-viewer { position: relative; }
+  .product-gallery-open { display: block; width: 100%; padding: 0; border: 0; border-radius: 1rem; background: transparent; text-align: inherit; cursor: zoom-in; }
+  .product-gallery-open:focus-visible { outline: 3px solid var(--color-grape); outline-offset: 4px; }
+  .product-gallery-open img { transition: transform .18s ease; }
+  .product-gallery-open:hover img { transform: scale(1.02); }
+  .product-gallery-zoom-hint {
+    position: absolute; bottom: .75rem; left: .75rem; z-index: 1; padding: .3rem .65rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 14%, transparent); border-radius: 999px;
+    background: color-mix(in oklab, white 90%, var(--color-pink)); color: var(--color-ink); font-size: .75rem; font-weight: 800; pointer-events: none;
+  }
   .product-gallery-arrow {
     position: absolute; top: 50%; z-index: 1; display: grid; width: clamp(2.4rem, 6vw, 2.8rem); height: clamp(2.4rem, 6vw, 2.8rem); place-items: center;
     border: 1px solid color-mix(in oklab, var(--color-ink) 18%, transparent); border-radius: 50%;
@@ -54,6 +63,40 @@
     position: absolute; right: .75rem; bottom: .75rem; padding: .25rem .65rem;
     border: 1px solid color-mix(in oklab, var(--color-ink) 14%, transparent); border-radius: 999px;
     background: color-mix(in oklab, white 90%, var(--color-pink)); color: var(--color-ink); font-size: .75rem; font-weight: 800;
+  }
+  .product-lightbox {
+    position: fixed; inset: 0; box-sizing: border-box; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0;
+    padding: clamp(.75rem, 2.5vw, 1.5rem); border: 0; background: transparent; color: white;
+  }
+  .product-lightbox[open] { display: grid; place-items: center; }
+  .product-lightbox::backdrop { background: color-mix(in oklab, var(--color-ink) 88%, transparent); backdrop-filter: blur(3px); }
+  .product-lightbox-content { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(100%, 76rem); height: 100%; min-height: 0; gap: .65rem; }
+  .product-lightbox-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2.8rem; }
+  .product-lightbox-position { margin: 0; color: white; font-size: .9rem; font-weight: 750; }
+  .product-lightbox-close {
+    display: grid; width: 2.8rem; height: 2.8rem; flex: 0 0 auto; place-items: center; border: 1px solid rgb(255 255 255 / 50%); border-radius: 50%;
+    background: color-mix(in oklab, var(--color-ink) 50%, transparent); color: white; cursor: pointer;
+  }
+  .product-lightbox-close svg { width: 1.35rem; height: 1.35rem; }
+  .product-lightbox-close:hover { background: var(--color-berry); }
+  .product-lightbox-close:focus-visible, .product-lightbox-arrow:focus-visible { outline: 3px solid var(--color-sun); outline-offset: 3px; }
+  .product-lightbox-stage { position: relative; display: grid; min-height: 0; place-items: center; }
+  .product-lightbox-image { display: block; max-width: 100%; max-height: 100%; border-radius: .75rem; object-fit: contain; box-shadow: 0 1rem 3rem rgb(0 0 0 / 30%); }
+  .product-lightbox-arrow {
+    position: absolute; top: 50%; z-index: 1; display: grid; width: clamp(2.75rem, 7vw, 3.25rem); height: clamp(2.75rem, 7vw, 3.25rem); place-items: center;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 20%, transparent); border-radius: 50%;
+    background: color-mix(in oklab, white 94%, var(--color-pink)); color: var(--color-ink); cursor: pointer;
+    transform: translateY(-50%); transition: background-color .16s, color .16s, transform .16s;
+  }
+  .product-lightbox-arrow svg { width: 1.5rem; height: 1.5rem; }
+  .product-lightbox-arrow:hover { transform: translateY(-50%) scale(1.06); background: var(--color-sun); color: var(--color-berry); }
+  .product-lightbox-arrow-prev { left: .75rem; }
+  .product-lightbox-arrow-next { right: .75rem; }
+  @media (max-width: 640px) {
+    .product-lightbox { padding: .75rem; }
+    .product-lightbox-image { max-height: calc(100dvh - 5.5rem); }
+    .product-lightbox-arrow-prev { left: .25rem; }
+    .product-lightbox-arrow-next { right: .25rem; }
   }
 
   /* Buttons change color and tilt on hover, squish when pressed */
@@ -132,6 +175,8 @@
   *, ::before, ::after { animation: none !important; transition: none !important; }
   .btn:hover, .card-lift:hover, .pill:hover, .hero-art:hover { transform: none; }
   .product-gallery-arrow:hover { transform: translateY(-50%); }
+  .product-gallery-open img, .product-gallery-open:hover img { transform: none; }
+  .product-lightbox-arrow:hover { transform: translateY(-50%); }
 }
 
 @layer components {
@@ -472,6 +517,7 @@
   .confirm-dialog-input-wrap { display: grid; max-width: 19rem; gap: .4rem; margin: 0 auto 1.15rem; text-align: left; }
   .confirm-dialog-input-label { font-size: .82rem; font-weight: 800; }
   .confirm-dialog-input { width: 100%; min-height: 2.9rem; border-color: color-mix(in oklab, var(--color-grass) 48%, white); background: white; font-size: 1rem; }
+  .confirm-dialog-textarea { min-height: 6rem; resize: vertical; line-height: 1.45; }
   .confirm-dialog-input-hint { color: color-mix(in oklab, var(--color-ink) 65%, white); font-size: .74rem; line-height: 1.4; }
   .confirm-dialog-error { margin: -.55rem 0 1rem; padding: .65rem .8rem; border: 1px solid color-mix(in oklab, var(--color-berry) 25%, white); border-radius: .8rem; background: color-mix(in oklab, var(--color-pink) 16%, white); color: var(--color-berry); font-size: .88rem; font-weight: 650; }
   .confirm-dialog-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .7rem; }

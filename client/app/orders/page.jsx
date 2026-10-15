@@ -105,6 +105,7 @@ export default function Orders() {
             )}
             {o.eta && <p className="text-sm">Estimate: {o.eta}</p>}
             {o.declineReason && <p className="text-sm">Reason: {o.declineReason}</p>}
+            {o.cancellationReason && <p className="text-sm">Cancellation reason: {o.cancellationReason}</p>}
             {canCancelByStatus && !showInstaPayActions && cancelControl}
           </div>
         );

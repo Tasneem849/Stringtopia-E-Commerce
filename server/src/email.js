@@ -80,6 +80,9 @@ export const mail = {
     shell('Your order is on its way', `<p>Your crochet order is out for delivery. Please have the cash ready for the courier.</p>${items(o)}${where(o)}`,
       { url: orderLink(o), label: 'View my order' })),
   cancelled: (o) => {
+    const cancellationReason = o.cancellationReason
+      ? `<p><b>Cancellation reason:</b> ${esc(o.cancellationReason)}</p>`
+      : '';
     const refundMessage = o.refundStatus === 'refunded'
       ? `<p>Your order was cancelled and a full refund of <b>${money(o.refundAmount || o.total)}</b> was confirmed. Your bank or payment provider may take time to post it.</p>`
       : o.refundStatus === 'processing'
@@ -90,7 +93,7 @@ export const mail = {
             ? `<p>Your order was cancelled, but the automatic refund request could not be completed. Stringtopia has been alerted and will arrange the full refund of <b>${money(o.refundAmount || o.total)}</b>.</p>`
             : '<p>Your order was cancelled before payment was received. Any held items have been returned to stock.</p>';
     notify(o.email, 'Your Stringtopia order was cancelled',
-      shell('Order cancelled', `${refundMessage}${items(o)}${where(o)}`,
+      shell('Order cancelled', `${refundMessage}${cancellationReason}${items(o)}${where(o)}`,
         { url: orderLink(o), label: 'View my order' }));
   },
 

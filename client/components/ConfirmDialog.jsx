@@ -12,8 +12,11 @@ export default function ConfirmDialog({
   cancelLabel = 'Keep it',
   busyLabel = 'Working…',
   inputLabel,
+  inputType = 'number',
   inputHint,
   inputValue,
+  inputPlaceholder,
+  inputMaxLength,
   onInputChange,
   confirmStyle = 'danger',
   busy = false,
@@ -67,16 +70,32 @@ export default function ConfirmDialog({
         {inputLabel && (
           <label className="confirm-dialog-input-wrap">
             <span className="confirm-dialog-input-label">{inputLabel}</span>
-            <input
-              type="number"
-              step="1"
-              value={inputValue}
-              onChange={(event) => onInputChange(event.target.value)}
-              className="field confirm-dialog-input"
-              aria-describedby={inputHint ? 'confirm-dialog-input-hint' : undefined}
-              autoFocus
-              disabled={busy}
-            />
+            {inputType === 'textarea' ? (
+              <textarea
+                rows={3}
+                value={inputValue ?? ''}
+                onChange={(event) => onInputChange(event.target.value)}
+                className="field confirm-dialog-input confirm-dialog-textarea"
+                aria-describedby={inputHint ? 'confirm-dialog-input-hint' : undefined}
+                placeholder={inputPlaceholder}
+                maxLength={inputMaxLength}
+                autoFocus
+                disabled={busy}
+              />
+            ) : (
+              <input
+                type={inputType}
+                step={inputType === 'number' ? '1' : undefined}
+                value={inputValue ?? ''}
+                onChange={(event) => onInputChange(event.target.value)}
+                className="field confirm-dialog-input"
+                aria-describedby={inputHint ? 'confirm-dialog-input-hint' : undefined}
+                placeholder={inputPlaceholder}
+                maxLength={inputMaxLength}
+                autoFocus
+                disabled={busy}
+              />
+            )}
             {inputHint && <span id="confirm-dialog-input-hint" className="confirm-dialog-input-hint">{inputHint}</span>}
           </label>
         )}
