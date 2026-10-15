@@ -82,7 +82,7 @@ The checked-in `.env.example` files contain placeholders only. Keep `.env`, `.en
 
 ## CI and tests
 
-GitHub Actions runs the API test suite against a disposable MongoDB service and builds the storefront on pushes to `main` and pull requests. The API tests can clear the database named in `MONGO_URI`; only use a database whose name includes `test` when running them locally. See [server/README.md](server/README.md) for API details.
+GitHub Actions runs the API test suite against a disposable MongoDB service and builds the storefront on pushes to `main` and pull requests. API integration tests require `TEST_MONGO_URI`, create a fresh uniquely named database for their run, and drop only that database afterward; they never fall back to the application's `MONGO_URI`. Never point `TEST_MONGO_URI` at production or shared data. See [server/README.md](server/README.md) for API details.
 
 ## Deployment
 

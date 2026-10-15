@@ -20,7 +20,7 @@ jobs:
           --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      MONGO_URI: mongodb://127.0.0.1:27017/stringtopia_test
+      TEST_MONGO_URI: mongodb://127.0.0.1:27017
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

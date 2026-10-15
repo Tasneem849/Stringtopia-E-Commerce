@@ -48,6 +48,14 @@ Admins can upload, replace, or remove the storewide looping track at `/admin/aud
 
 ## Tests
 `npm test` runs the unit tests (payment requests, signature checks, prices, phone numbers, emails, rate limiting).
-Set `MONGO_URI` to a database whose name contains `test` (for example `mongodb://127.0.0.1:27017/stringtopia_test`)
-to also run the API tests: accounts, admin protection, catalog, checkout totals, the last-item race, reservations,
-payment callbacks (forged, duplicated and late), and expiry. They wipe that database, so never point them at real data.
+The API integration tests run only when `TEST_MONGO_URI` is explicitly set. They override the URI's database name
+with a fresh, unique `stringtopia_test_*` database for that run, then drop only that generated database afterward.
+For local development, use a dedicated test MongoDB instance or account, for example in PowerShell:
+
+```powershell
+$env:TEST_MONGO_URI = "mongodb://127.0.0.1:27017"
+npm test
+```
+
+Never set `TEST_MONGO_URI` to a production or shared database connection. The test suite does not fall back to
+`MONGO_URI`; without `TEST_MONGO_URI`, API integration tests are skipped.

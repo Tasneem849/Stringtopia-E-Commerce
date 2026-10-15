@@ -7,6 +7,7 @@ import { describeAuthError } from '@/lib/authErrors';
 import { getPostLoginPath } from '@/lib/navigation';
 import { useStore } from '@/components/Providers';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import PasswordField from '@/components/PasswordField';
 
 export default function Login() {
   const { login, cspNonce } = useStore();
@@ -85,8 +86,7 @@ export default function Login() {
     <form onSubmit={submit} noValidate className="card mx-auto max-w-sm space-y-3">
       <h1 className="text-2xl font-bold">{mode === 'login' ? 'Log in' : 'Create account'}</h1>
       <input type="email" placeholder="Email" autoComplete="email" value={f.email} onChange={set('email')} className={input} />
-      <input
-        type="password"
+      <PasswordField
         placeholder={mode === 'register' ? 'Password (at least 8 characters)' : 'Password'}
         autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
         value={f.password}

@@ -2,6 +2,7 @@ import CatalogBrowser from '@/components/CatalogBrowser';
 import { api } from '@/lib/api';
 
 import BrandArtwork from '@/components/BrandArtwork';
+import BackToTopButton from '@/components/BackToTopButton';
 
 // Server-rendered so Google can index the catalog.
 export default async function Home({ searchParams }) {
@@ -55,6 +56,7 @@ export default async function Home({ searchParams }) {
         initialFilters={initialFilters} categories={categories}
         initialError={catalogAvailable ? '' : 'The catalog is taking a little longer to wake up. Please refresh in a moment.'}
       />
+      <BackToTopButton />
     </>
   );
 }

@@ -1,13 +1,31 @@
 import { describe, test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { paymobCallback } from '../testkit/paymobCallback.js';
 
-// These run against a real MongoDB and are skipped unless MONGO_URI is set (the database name must contain "test").
-const RUN = Boolean(process.env.MONGO_URI);
+// API integration tests require an explicit test-only URI and use a fresh database per run.
+// Never fall back to MONGO_URI: that value is commonly the application's shared database.
+const TEST_MONGO_URI = process.env.TEST_MONGO_URI;
+const RUN = Boolean(TEST_MONGO_URI);
+const TEST_DATABASE_NAME = `stringtopia_test_${process.pid}_${crypto.randomBytes(6).toString('hex')}`;
+// Fixed test-only key; never reuse this value outside the integration suite.
+const ADMIN_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 
-describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' }, () => {
-  let server, base, mongoose, Product, User, Order, sweep, adminToken, realFetch;
+function adminTotpCode(now = Date.now()) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bits = [...ADMIN_TOTP_SECRET].map((character) => alphabet.indexOf(character).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(Array.from({ length: Math.floor(bits.length / 8) }, (_, index) => Number.parseInt(bits.slice(index * 8, index * 8 + 8), 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)));
+  const digest = crypto.createHmac('sha1', key).update(counter).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+describe('API', { skip: !RUN && 'set TEST_MONGO_URI to a dedicated test MongoDB connection to run these' }, () => {
+  let server, base, mongoose, Product, User, Order, AdminAuditLog, RateLimitBucket, sweep, adminToken, realFetch;
   const paymobCalls = [];
+  const refundCalls = [];
   let counter = 0;
 
   const call = async (path, { method = 'GET', token, body } = {}) => {
@@ -34,44 +52,70 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
 
   before(async () => {
     Object.assign(process.env, {
-      JWT_SECRET: 'test-secret', CLIENT_URL: 'http://localhost:3000', API_URL: 'https://api.example.com', CURRENCY: 'EGP',
-      DELIVERY_FEE: '5000', PICKUP_ADDRESS: '1 Test Street', PAYMOB_SECRET_KEY: 'egy_sk_test_x', PAYMOB_PUBLIC_KEY: 'egy_pk_test_y',
+      JWT_SECRET: 'test-secret', ADMIN_TOTP_SECRET, RATE_LIMIT_PROXY_SECRET: 'test-rate-limit-proxy-secret-at-least-32-characters',
+      CLIENT_URL: 'http://localhost:3000', API_URL: 'https://api.example.com', CURRENCY: 'EGP',
+      DELIVERY_FEE: '5000', PICKUP_ADDRESS: '1 Test Street', PAYMOB_API_KEY: 'merchant-test-api-key',
+      PAYMOB_SECRET_KEY: 'egy_sk_test_x', PAYMOB_PUBLIC_KEY: 'egy_pk_test_y', PAYMOB_BASE_URL: 'https://accept.paymob.com',
       PAYMOB_HMAC_SECRET: 'test-hmac', PAYMOB_INTEGRATION_IDS: '111',
     });
     delete process.env.SMTP_HOST;
     // Play the part of Paymob; every other request goes through for real
     realFetch = globalThis.fetch;
     globalThis.fetch = async (url, opts) => {
-      if (String(url).includes('accept.paymob.com')) {
+      const target = String(url);
+      if (target.endsWith('/v1/intention/')) {
         paymobCalls.push(JSON.parse(opts.body));
-        return { ok: true, json: async () => ({ client_secret: 'egy_csk_test_z' }) };
+        return { ok: true, json: async () => ({ client_secret: 'egy_csk_test_z', intention_order_id: 12345 }) };
       }
+      if (target.endsWith('/api/acceptance/void_refund/refund')) {
+        refundCalls.push(JSON.parse(opts.body));
+        return { ok: true, json: async () => ({ id: 98765 }) };
+      }
+      if (target.endsWith('/api/auth/tokens')) return { ok: true, json: async () => ({ token: 'merchant-test-token' }) };
+      if (target.includes('accept.paymob.com')) return { ok: true, json: async () => ({}) };
       return realFetch(url, opts);
     };
     mongoose = (await import('mongoose')).default;
     Product = (await import('../src/models/Product.js')).default;
     User = (await import('../src/models/User.js')).default;
     Order = (await import('../src/models/Order.js')).default;
+    AdminAuditLog = (await import('../src/models/AdminAuditLog.js')).default;
+    RateLimitBucket = (await import('../src/models/RateLimitBucket.js')).default;
     const { app } = await import('../src/app.js');
     ({ sweep } = await import('../src/routes/orders.js'));
 
-    await mongoose.connect(process.env.MONGO_URI);
-    if (!/test/i.test(mongoose.connection.name)) {
-      throw new Error(`Refusing to run against "${mongoose.connection.name}": the database name must contain "test"`);
+    // The URI supplies the MongoDB host and credentials only. dbName overrides any database
+    // in the URI, so every run writes to a new disposable database and never the app database.
+    await mongoose.connect(TEST_MONGO_URI, { dbName: TEST_DATABASE_NAME });
+    if (mongoose.connection.name !== TEST_DATABASE_NAME) {
+      throw new Error('Refusing to run API tests because the isolated test database was not selected.');
     }
-    await Promise.all([Product.init(), User.init(), Order.init()]);
-    await Promise.all([Product, User, Order].map((m) => m.deleteMany({})));
+    await Promise.all([Product.init(), User.init(), Order.init(), AdminAuditLog.init(), RateLimitBucket.init()]);
+    await Promise.all([Product, User, Order, AdminAuditLog, RateLimitBucket].map((m) => m.deleteMany({})));
     await User.create({ name: 'Admin', email: 'admin@test.com', password: 'adminpass1', role: 'admin' });
 
     await new Promise((resolve) => { server = app.listen(0, resolve); });
     base = `http://127.0.0.1:${server.address().port}`;
-    adminToken = (await call('/api/auth/login', { method: 'POST', body: { email: 'admin@test.com', password: 'adminpass1' } })).body.token;
+    adminToken = (await call('/api/auth/login', {
+      method: 'POST', body: { email: 'admin@test.com', password: 'adminpass1', totpCode: adminTotpCode() },
+    })).body.token;
   });
-  beforeEach(() => Promise.all([Product.deleteMany({}), Order.deleteMany({})]));
+  beforeEach(async () => {
+    paymobCalls.length = 0;
+    refundCalls.length = 0;
+    await Promise.all([Product.deleteMany({}), Order.deleteMany({}), AdminAuditLog.deleteMany({}), RateLimitBucket.deleteMany({})]);
+  });
   after(async () => {
     if (realFetch) globalThis.fetch = realFetch;
     if (server) { server.close(); server.closeAllConnections?.(); }
-    await mongoose?.disconnect();
+    try {
+      // Drop only this run's generated database, and only after confirming its exact name.
+      if (mongoose?.connection?.readyState === 1 && mongoose.connection.name === TEST_DATABASE_NAME) {
+        await mongoose.connection.dropDatabase();
+      }
+    } finally {
+      await mongoose?.disconnect();
+    }
   });
 
   test('accounts: duplicate emails are rejected and wrong passwords cannot log in', async () => {
@@ -80,6 +124,27 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
     assert.equal((await call('/api/auth/register', { method: 'POST', body })).status, 409);
     assert.ok((await call('/api/auth/login', { method: 'POST', body })).body.token);
     assert.equal((await call('/api/auth/login', { method: 'POST', body: { ...body, password: 'wrongpass99' } })).status, 401);
+  });
+
+  test('admin sign-in requires a valid authenticator code after the password', async () => {
+    const credentials = { email: 'admin@test.com', password: 'adminpass1' };
+    const missing = await call('/api/auth/login', { method: 'POST', body: credentials });
+    assert.equal(missing.status, 401);
+    assert.equal(missing.body.code, 'ADMIN_MFA_REQUIRED');
+
+    const now = Date.now();
+    const validCodes = new Set([-60_000, -30_000, 0, 30_000, 60_000].map((offset) => adminTotpCode(now + offset)));
+    const validCode = adminTotpCode(now);
+    let invalidCode = '000000';
+    while (validCodes.has(invalidCode)) invalidCode = String((Number(invalidCode) + 1) % 1_000_000).padStart(6, '0');
+    const invalid = await call('/api/auth/login', { method: 'POST', body: { ...credentials, totpCode: invalidCode } });
+    assert.equal(invalid.status, 401);
+    assert.equal(invalid.body.code, 'ADMIN_MFA_INVALID');
+
+    const accepted = await call('/api/auth/login', { method: 'POST', body: { ...credentials, totpCode: validCode } });
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.body.user.role, 'admin');
+    assert.ok(accepted.body.token);
   });
 
   test('only admins can manage products and see all orders', async () => {
@@ -203,6 +268,33 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
     assert.equal((await Product.findById(p.id)).stock, 0);
   });
 
+  test('admin cancellation requests one full Paymob refund and retains the cancellation reason', async () => {
+    const p = await newProduct({ stock: 3, price: 10000 });
+    const started = await checkout([{ productId: p.id, qty: 1 }], 'refund@test.com');
+    assert.equal(started.status, 200);
+    const order = await Order.findOne({ email: 'refund@test.com' });
+    const paid = paymobCallback(order, { id: 24680, order: { id: 13579, merchant_order_id: `${order.id}-1` } });
+    assert.equal((await sendCallback(paid)).status, 200);
+    assert.equal((await Order.findById(order.id)).paymentStatus, 'paid');
+
+    const reason = 'Customer asked to cancel';
+    const cancelled = await call(`/api/admin/orders/${order.id}/cancel`, {
+      method: 'PATCH', token: adminToken, body: { reason },
+    });
+    assert.equal(cancelled.status, 200);
+    assert.equal(cancelled.body.status, 'cancelled');
+    assert.equal(cancelled.body.paymentStatus, 'paid');
+    assert.equal(cancelled.body.refundStatus, 'processing');
+    assert.equal(cancelled.body.refundAmount, order.total);
+    assert.equal(cancelled.body.paymobRefundTransactionId, '98765');
+    assert.equal(cancelled.body.cancellationReason, reason);
+    assert.deepEqual(refundCalls, [{ transaction_id: '24680', amount_cents: order.total }]);
+
+    const repeated = await call(`/api/admin/orders/${order.id}/cancel`, { method: 'PATCH', token: adminToken, body: {} });
+    assert.equal(repeated.status, 200);
+    assert.equal(refundCalls.length, 1, 'repeating the cancel action must not issue a second refund');
+  });
+
   test('the guest order page shows only the basics', async () => {
     const p = await newProduct();
     await checkout([{ productId: p.id, qty: 1 }], 'privacy@test.com');
@@ -212,5 +304,41 @@ describe('API', { skip: !RUN && 'set MONGO_URI to a test database to run these' 
     assert.deepEqual(Object.keys(res.body).sort(), ['items', 'method', 'status', 'total']);
     assert.deepEqual(res.body.items, [{ name: p.name, qty: 1 }]);
     assert.equal((await call('/api/orders/by-ref/not-a-real-token')).status, 404);
+  });
+
+  test('admins can review audit events for their changes', async () => {
+    const product = await newProduct();
+    const changed = await call(`/api/admin/products/${product.id}/stock`, { method: 'PATCH', token: adminToken, body: { delta: 2 } });
+    assert.equal(changed.status, 200);
+
+    let event;
+    for (let attempt = 0; attempt < 20 && !event; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      event = await AdminAuditLog.findOne({ route: '/api/admin/products/:id/stock' }).lean();
+    }
+    assert.ok(event, 'the stock change should be recorded in the audit log');
+    assert.equal(event.method, 'PATCH');
+    assert.equal(event.status, 200);
+    assert.ok(event.requestId);
+
+    const auditLog = await call('/api/admin/audit-log?limit=5', { token: adminToken });
+    assert.equal(auditLog.status, 200);
+    assert.ok(auditLog.body.events.some((entry) => entry.route === '/api/admin/products/:id/stock'));
+    assert.equal((await call('/api/admin/audit-log')).status, 401);
+    const customerToken = await register('audit-customer@test.com');
+    assert.equal((await call('/api/admin/audit-log', { token: customerToken })).status, 403);
+  });
+
+  test('login rate limits repeated attempts and returns a friendly response', async () => {
+    const responses = [];
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      responses.push(await call('/api/auth/login', {
+        method: 'POST', body: { email: 'rate-limit@test.com', password: 'wrong-password' },
+      }));
+    }
+    assert.deepEqual(responses.slice(0, 8).map((response) => response.status), Array(8).fill(404));
+    assert.equal(responses[8].status, 429);
+    assert.equal(responses[8].body.code, 'RATE_LIMITED');
+    assert.match(responses[8].body.message, /wait a few minutes and try again/i);
   });
 });

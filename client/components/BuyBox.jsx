@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useStore } from './Providers';
 import DeliveryForm from './DeliveryForm';
 import ContactFields from './ContactFields';
+import PasswordField from './PasswordField';
 
 // Enough stock -> "Add to cart" (guests welcome). Not enough -> reservation request, which needs an account:
 // guests create one right here (email + password) and the request is sent in the same step.
@@ -90,8 +91,8 @@ export default function BuyBox({ product: p }) {
                 {mode === 'register' ? 'Create your account to track this request:' : 'Log in to send this request:'}
               </p>
               <input type="email" required placeholder="Email" autoComplete="email" {...field('email')} className={input} />
-              <input
-                type="password" required minLength={8} placeholder="Password (8+ characters)"
+              <PasswordField
+                required minLength={8} placeholder="Password (8+ characters)"
                 autoComplete={mode === 'register' ? 'new-password' : 'current-password'} {...field('password')} className={input}
               />
               <button type="button" className="cursor-pointer underline" onClick={() => setMode(mode === 'register' ? 'login' : 'register')}>

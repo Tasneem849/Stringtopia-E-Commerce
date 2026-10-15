@@ -12,7 +12,7 @@ const display = Gaegu({ weight: ['400', '700'], subsets: ['latin'], variable: '-
 const body = Figtree({ subsets: ['latin'], variable: '--font-body' });
 
 export const metadata = {
-  title: 'Stringtopia | Handmade crochet',
+  title: 'Stringtopia | Handmade Crochet',
   description: 'Handmade crochet pieces, made with love.',
 };
 
@@ -54,7 +54,7 @@ export default async function RootLayout({ children }) {
                 rel="noopener noreferrer"
                 aria-label="Stringtopia on Instagram"
                 title="Instagram"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#C13584] transition-colors hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#C13584] transition-colors hover:bg-[#f4bdde65] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="3" y="3" width="18" height="18" rx="5" />
