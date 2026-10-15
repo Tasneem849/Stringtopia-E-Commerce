@@ -42,7 +42,7 @@ export default async function RootLayout({ children }) {
                 rel="noopener noreferrer"
                 aria-label="Stringtopia on Facebook"
                 title="Facebook"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#1877F2] transition-colors hover:bg-[#2884fc7c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/20 text-[#1877F2] transition-colors hover:bg-[#66a6fa7c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
                   <path d="M13.5 21v-7.6h2.55l.38-2.96H13.5V8.55c0-.86.24-1.45 1.47-1.45h1.57V4.46c-.27-.04-1.2-.12-2.28-.12-2.26 0-3.8 1.38-3.8 3.92v2.18H7.9v2.96h2.56V21h3.04Z" />
