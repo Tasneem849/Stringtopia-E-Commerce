@@ -4,7 +4,9 @@
 
 A full-stack storefront for handmade crochet, built for customers in Egypt. The shop supports EGP pricing, local delivery and pickup, and several payment methods.
 
-**Storefront:** [stringtopia-e-commerece-xcye.vercel.app](https://stringtopia-e-commerece-xcye.vercel.app/)
+**Live demo (read-only):** [Storefront](https://stringtopia-demo-storefront.vercel.app/) · [API health](https://stringtopia-demo-api.vercel.app/api/health)
+
+**Production storefront:** [stringtopia-e-commerece-xcye.vercel.app](https://stringtopia-e-commerece-xcye.vercel.app/)
 
 ## Features
 
