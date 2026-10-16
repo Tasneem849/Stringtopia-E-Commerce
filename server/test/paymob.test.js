@@ -36,6 +36,28 @@ test('payment request: lines add up to the amount, and billing details and refer
   assert.equal(body.redirection_url, 'http://localhost:3000/thanks?ref=tok123');
 });
 
+test('payment request: promo savings are allocated across products and line totals match the discounted amount', async () => {
+  const calls = stubPaymob({ ok: true, json: async () => ({ client_secret: 'egy_csk_test_z', intention_order_id: 12345 }) });
+  const promoOrder = {
+    ...order,
+    total: 15000,
+    discountAmount: 1000,
+    items: [
+      { qty: 2, name: 'Daisy Amigurumi', price: 3000 },
+      { qty: 1, name: 'Tulip Pouch', price: 5000 },
+    ],
+  };
+  await createCheckout(promoOrder, 1);
+  const { body } = calls[0];
+  assert.deepEqual(body.items.map(({ name, amount }) => ({ name, amount })), [
+    { name: '2 x Daisy Amigurumi', amount: 5455 },
+    { name: '1 x Tulip Pouch', amount: 4545 },
+    { name: 'Delivery', amount: 5000 },
+  ]);
+  assert.equal(body.items.reduce((sum, item) => sum + item.amount * item.quantity, 0), body.amount);
+  assert.equal(body.amount, 15000);
+});
+
 test('payment request: a one-word name still works', async () => {
   const calls = stubPaymob({ ok: true, json: async () => ({ client_secret: 'x' }) });
   await createCheckout({ ...order, customer: { name: 'Mona', phone: '+201012345678' } }, 1);
@@ -86,6 +108,25 @@ test('transaction inquiry authenticates with the merchant API key and uses the m
   }
 });
 
+test('transaction inquiry distinguishes no transaction from an unavailable inquiry', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.PAYMOB_API_KEY;
+  process.env.PAYMOB_API_KEY = 'merchant-api-key';
+  globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({}) });
+  try {
+    assert.equal(await inquireTransactionByReference('unpaid-attempt-1'), null);
+    delete process.env.PAYMOB_API_KEY;
+    await assert.rejects(inquireTransactionByReference('unpaid-attempt-1'), /PAYMOB_API_KEY is not configured/);
+    process.env.PAYMOB_API_KEY = 'merchant-api-key';
+    globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
+    await assert.rejects(inquireTransactionByReference('unpaid-attempt-1'), /failed with status 503/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.PAYMOB_API_KEY;
+    else process.env.PAYMOB_API_KEY = originalKey;
+  }
+});
+
 test('callback signature: accepts a genuine one, rejects tampering, the wrong secret and nothing at all', () => {
   const { obj, hmac } = paymobCallback(order);
   assert.equal(isValidHmac(obj, hmac), true);
@@ -93,4 +134,13 @@ test('callback signature: accepts a genuine one, rejects tampering, the wrong se
   assert.equal(isValidHmac(obj, paymobCallback(order, {}, 'other-secret').hmac), false);
   assert.equal(isValidHmac(obj, undefined), false);
   assert.equal(isValidHmac(undefined, hmac), false);
+});
+
+test('callback signature remains valid if merchant_order_id is changed, so it cannot identify the database order', () => {
+  const genuine = paymobCallback(order);
+  const redirected = paymobCallback(order, {
+    order: { ...genuine.obj.order, merchant_order_id: `${'b'.repeat(24)}-1` },
+  });
+  assert.equal(redirected.hmac, genuine.hmac);
+  assert.equal(isValidHmac(redirected.obj, genuine.hmac), true);
 });

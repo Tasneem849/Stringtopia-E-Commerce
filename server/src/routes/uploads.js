@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 
 const router = Router();
 
-// This router is mounted inside /api/admin, which applies protect + adminOnly before every route.
+// This router is mounted inside /api/admin, which applies the database-backed admin guard before every route.
 router.get('/sign', (req, res) => {
   const { CLOUDINARY_CLOUD_NAME: cloudName, CLOUDINARY_API_KEY: apiKey, CLOUDINARY_API_SECRET: secret } = process.env;
   if (!cloudName || !apiKey || !secret) {

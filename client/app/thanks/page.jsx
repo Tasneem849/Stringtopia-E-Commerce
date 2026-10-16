@@ -14,6 +14,8 @@ export default function Thanks() {
   const [transferReference, setTransferReference] = useState('');
   const [referenceSaved, setReferenceSaved] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
+  const [savingProof, setSavingProof] = useState(false);
+  const [whatsappReady, setWhatsappReady] = useState(false);
   const [referenceError, setReferenceError] = useState('');
   const [paymentCheckNotice, setPaymentCheckNotice] = useState('');
 
@@ -34,6 +36,7 @@ export default function Thanks() {
         if (!active) return;
         setOrder(current);
         setTransferReference(current.instaPayReference || '');
+        setReferenceSaved(Boolean(current.instaPayReference));
         if (!paymentFailed && current.paymentMethod === 'paymob' && ['pending', 'approved'].includes(current.status)) {
           if (++tries < 10) timer = window.setTimeout(load, 1500);
           else {
@@ -69,6 +72,26 @@ export default function Thanks() {
       setReferenceError(saveError.message);
     } finally {
       setSavingReference(false);
+    }
+  }
+
+  async function openWhatsAppProof() {
+    if (!whatsappUrl || savingProof) return;
+    // Open a blank tab synchronously from the click so popup blockers allow it;
+    // point it to WhatsApp after the proof intent has been saved on the order.
+    const proofWindow = window.open('about:blank', '_blank');
+    if (proofWindow) proofWindow.opener = null;
+    setSavingProof(true);
+    setReferenceError('');
+    try {
+      await api(`/orders/by-ref/${ref}/instapay-proof`, { method: 'POST', body: { method: 'whatsapp' } });
+      if (proofWindow) proofWindow.location.href = whatsappUrl;
+      else setWhatsappReady(true);
+    } catch (saveError) {
+      proofWindow?.close();
+      setReferenceError(saveError.message);
+    } finally {
+      setSavingProof(false);
     }
   }
 
@@ -131,13 +154,35 @@ export default function Thanks() {
               </form>
           )}
           {proofChoice === 'whatsapp' && (whatsappUrl
-            ? <a className="btn btn-primary" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Open WhatsApp to send proof</a>
+            ? <>
+                <button type="button" className="btn btn-primary" onClick={openWhatsAppProof} disabled={savingProof}>{savingProof ? 'Preparing WhatsApp…' : 'Open WhatsApp to send proof'}</button>
+                {whatsappReady && <a className="block text-yarn underline" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Continue to WhatsApp</a>}
+              </>
             : <p className="checkout-error" role="alert">WhatsApp proof is not configured yet. Choose the transfer reference option.</p>)}
+          {proofChoice === 'whatsapp' && referenceError && <p className="checkout-error" role="alert">{referenceError}</p>}
           <p className="text-sm text-stone-600">Your order remains awaiting confirmation until Stringtopia verifies the transfer.</p>
         </section>
       )}
 
-      {order.status === 'expired' && <p className="text-sm text-stone-600">Your items were released back into stock. You can place a new order any time.</p>}
+      {isInstaPay && order.status === 'expired' && order.paymentStatus === 'awaiting_confirmation' && (
+        <section className="instapay-confirmation" aria-labelledby="instapay-expired-title">
+          <h2 id="instapay-expired-title" className="text-xl font-bold">Already sent this transfer?</h2>
+          <p className="text-sm text-stone-700">This order’s stock hold expired. Please don’t send another payment. If you already transferred, share the reference or screenshot and Stringtopia will check whether the items are still available before confirming.</p>
+          {referenceSaved
+            ? <p className="text-sm font-semibold text-green-800" role="status">Your transfer reference was sent to Stringtopia for confirmation.</p>
+            : <form onSubmit={submitTransferReference} className="instapay-reference-form">
+                <label className="sr-only" htmlFor="instapay-transfer-reference-expired">InstaPay transaction reference</label>
+                <input id="instapay-transfer-reference-expired" className="field w-full" required minLength={3} maxLength={80} value={transferReference} onChange={(event) => setTransferReference(event.target.value)} placeholder="InstaPay transaction reference" />
+                <button type="submit" className="btn btn-primary" disabled={savingReference}>{savingReference ? 'Sending…' : 'Send reference'}</button>
+              </form>}
+          {whatsappUrl
+            ? <button type="button" className="btn btn-ghost" onClick={openWhatsAppProof} disabled={savingProof}>{savingProof ? 'Preparing WhatsApp…' : 'Send a screenshot on WhatsApp'}</button>
+            : <p className="text-sm text-stone-600">WhatsApp proof is not configured. Contact Stringtopia with your order reference and transfer details.</p>}
+          {whatsappReady && <a className="block text-yarn underline" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Continue to WhatsApp</a>}
+          {referenceError && <p className="checkout-error" role="alert">{referenceError}</p>}
+        </section>
+      )}
+      {order.status === 'expired' && !isInstaPay && <p className="text-sm text-stone-600">Your items were released back into stock. You can place a new order any time.</p>}
       {order.status === 'cancelled' && <p className="text-sm text-stone-600">This order was cancelled. You can place a new order any time.</p>}
       {paid && <p className="text-sm text-stone-600">Payment is confirmed. Bookmark this page to check on your order; we also email you a link.</p>}
       {failed && order.paymentMethod === 'paymob' && ['pending', 'approved'].includes(order.status) && (

@@ -26,7 +26,12 @@ const schema = new mongoose.Schema({
   paidAt: Date,
   orderSource: { type: String, enum: ['website', 'whatsapp', 'phone'], default: 'website', index: true },
   instaPayReference: { type: String, trim: true },
+  instaPayProofMethod: { type: String, enum: ['reference', 'whatsapp'] },
+  instaPayProofSubmittedAt: Date,
   paymobReference: { type: String, trim: true },
+  // Keep every intention order ID: a customer can start a fresh checkout for each retry.
+  paymobOrderIds: [{ type: String, trim: true }],
+  // Legacy scalar retained so existing orders created before paymobOrderIds can still settle.
   paymobOrderId: { type: String, trim: true },
   paymobTransactionId: { type: String, trim: true },
   refundStatus: { type: String, enum: ['not_required', 'processing', 'refunded', 'manual_required', 'failed'], default: 'not_required', index: true },
@@ -70,5 +75,6 @@ const schema = new mongoose.Schema({
 schema.index({ status: 1, createdAt: 1 });
 schema.index({ checkoutIpHash: 1, status: 1 });
 schema.index({ paymentStatus: 1, paidAt: 1, status: 1 });
+schema.index({ paymobTransactionId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('Order', schema);

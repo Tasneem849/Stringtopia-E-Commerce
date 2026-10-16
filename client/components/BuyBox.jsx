@@ -40,6 +40,11 @@ export default function BuyBox({ product: p }) {
       let t = token;
       if (!t) {
         const session = await api(`/auth/${mode}`, { method: 'POST', body: creds });
+        if (mode === 'register') {
+          setMode('login');
+          setMsg(session.message || 'If an account can be used with these details, you can now try signing in.');
+          return;
+        }
         t = login(session).token;
       }
       await api('/orders/reserve', { token: t, method: 'POST', body: { items: [{ productId: p._id, qty, ...(variant ? { variant } : {}) }], note, delivery, customer } });

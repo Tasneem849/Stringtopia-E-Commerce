@@ -6,7 +6,7 @@ import Product from '../models/Product.js';
 import PromoCode from '../models/PromoCode.js';
 import User from '../models/User.js';
 import { mail } from '../email.js';
-import { createCheckout, inquireTransactionByReference, isValidHmac } from '../paymob.js';
+import { createCheckout, inquireTransactionById, inquireTransactionByReference, isValidHmac } from '../paymob.js';
 import { requestPaymobRefund, recordPaymobRefund, reconcilePaymobRefund } from '../refunds.js';
 import { feeFor, sumTotal, toEgPhone } from '../pricing.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
@@ -19,6 +19,13 @@ const PAY_HOURS = 23; // how long an approved reservation stays payable
 const CANCEL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 const promoValidationLimit = rateLimit({ scope: 'orders-promo-validation', windowMs: 10 * 60e3, max: 20 });
 const checkoutLimit = rateLimit({ scope: 'orders-checkout', windowMs: 10 * 60e3, max: 12 });
+const reservationLimit = rateLimit({
+  scope: 'orders-reserve',
+  windowMs: 60 * 60e3,
+  max: 5,
+  keyGenerator: (req) => [`reserve-ip:${rateLimitClientIp(req)}`, `reserve-user:${req.user?.id || 'unknown'}`],
+});
+const MAX_OPEN_RESERVATION_REQUESTS = 3;
 const paymobRetryLimit = rateLimit({
   scope: 'orders-paymob-retry',
   windowMs: 15 * 60e3,
@@ -105,6 +112,39 @@ async function claimPromo(code, subtotal) {
 const restock = (lines) =>
   Promise.all(lines.map((l) => Product.updateOne({ _id: l.product }, { $inc: { stock: l.qty } })));
 
+function serializeCustomerOrder(order) {
+  const value = typeof order?.toObject === 'function' ? order.toObject() : order;
+  return {
+    _id: value._id,
+    createdAt: value.createdAt,
+    status: value.status,
+    paymentMethod: value.paymentMethod,
+    paymentStatus: value.paymentStatus,
+    total: value.total,
+    shippingFee: value.shippingFee,
+    promoCode: value.promoCode,
+    discountAmount: value.discountAmount,
+    publicToken: value.publicToken,
+    expiresAt: value.expiresAt,
+    eta: value.eta,
+    declineReason: value.declineReason,
+    cancellationReason: value.cancellationReason,
+    delivery: value.delivery ? {
+      method: value.delivery.method,
+      gift: value.delivery.gift,
+      recipientName: value.delivery.recipientName,
+      address: value.delivery.address ? { city: value.delivery.address.city } : undefined,
+    } : undefined,
+    items: (value.items || []).map((item) => ({
+      _id: item._id,
+      name: item.name,
+      qty: item.qty,
+      variantLabel: item.variantLabel,
+      variant: item.variant,
+    })),
+  };
+}
+
 // Atomic per line: the filter `stock >= qty` and the decrement happen in one DB operation.
 async function holdStock(lines) {
   const held = [];
@@ -147,7 +187,14 @@ async function startPayment(order) {
   const specialReference = `${order.id}-${updated.paymentAttempts}`;
   await Order.updateOne({ _id: order._id }, { paymobReference: specialReference });
   const checkout = await createCheckout(order, updated.paymentAttempts);
-  if (checkout.paymobOrderId) await Order.updateOne({ _id: order._id }, { paymobOrderId: String(checkout.paymobOrderId) });
+  if (checkout.paymobOrderId) {
+    const paymobOrderId = String(checkout.paymobOrderId);
+    const paymobOrderIds = [...new Set([ ...(order.paymobOrderIds || []), order.paymobOrderId, paymobOrderId ].filter(Boolean).map(String))];
+    await Order.updateOne({ _id: order._id }, {
+      $set: { paymobOrderId },
+      $addToSet: { paymobOrderIds: { $each: paymobOrderIds } },
+    });
+  }
   return checkout.url;
 }
 
@@ -220,10 +267,14 @@ router.post('/checkout', checkoutLimit, optionalAuth, async (req, res) => {
 });
 // ---- reservation: ONLY when stock can't cover the quantity (sold out, or wants 2 and only 1 is left). ----
 // Seller approves/declines, then the customer pays. Nothing is held: an approved item is made to order.
-router.post('/reserve', protect, async (req, res) => {
+router.post('/reserve', protect, reservationLimit, async (req, res) => {
   const { items, note, delivery, customer } = z.object({
     items: itemsSchema, note: z.string().max(500).optional(), delivery: deliverySchema, customer: customerSchema,
   }).parse(req.body);
+  const openRequests = await Order.countDocuments({ user: req.user.id, status: 'requested' });
+  if (openRequests >= MAX_OPEN_RESERVATION_REQUESTS) {
+    throw fail(409, `You already have ${MAX_OPEN_RESERVATION_REQUESTS} reservation requests waiting for a decision. Please wait for an update before sending another.`);
+  }
   const lines = await buildLines(items);
   const wanted = new Map(); // total quantity per product, in case it appears on several lines
   for (const l of lines) wanted.set(String(l.product), (wanted.get(String(l.product)) ?? 0) + l.qty);
@@ -240,10 +291,7 @@ router.post('/reserve', protect, async (req, res) => {
   });
   mail.requestReceived(order);
   mail.newRequest(order);
-  res.status(201).json({
-    ...order.toObject(),
-    items: order.items.map(({ product, name, price, qty, variantLabel, variant }) => ({ product, name, price, qty, variantLabel, variant })),
-  });
+  res.status(201).json(serializeCustomerOrder(order));
 });
 
 router.post('/:id/cancel', protect, async (req, res) => {
@@ -257,7 +305,7 @@ router.post('/:id/cancel', protect, async (req, res) => {
   if (!order) return res.status(409).json({
     message: "This order can't be cancelled. Cancellation is only available for eligible orders within 3 days of placing them.",
   });
-  res.json(order);
+  res.json(serializeCustomerOrder(order));
 });
 
 // Payment links (emails, "Pay now", "Try again") point at our site and land here. A fresh Paymob checkout
@@ -282,23 +330,50 @@ export async function webhook(req, res) {
     const updated = await recordPaymobRefund(order, obj);
     if (updated) mail.refunded(updated);
   } else if (type === 'TRANSACTION' && obj.success === true && obj.pending !== true && !obj.is_voided && !obj.is_refunded) {
-    const orderId = String(obj.order?.merchant_order_id || '').split('-')[0]; // "<order id>-<attempt>"
     const transactionId = obj.id == null ? undefined : String(obj.id);
     const paymobOrderId = obj.order?.id == null ? undefined : String(obj.order.id);
-    if (/^[a-f0-9]{24}$/.test(orderId)) await settle(orderId, obj.amount_cents, transactionId, paymobOrderId);
-    else if (paymobOrderId) {
-      const order = await Order.findOne({ paymobOrderId });
-      if (order) await settle(order.id, obj.amount_cents, transactionId, paymobOrderId);
+    // Paymob signs order.id, but merchant_order_id is mutable in a callback. Resolve the
+    // order only through an intention ID saved when this server created the checkout.
+    if (transactionId && paymobOrderId) {
+      const order = await Order.findOne({ paymentMethod: 'paymob', $or: [
+        { paymobOrderIds: paymobOrderId },
+        { paymobOrderId: paymobOrderId }, // orders created before paymobOrderIds was introduced
+      ] });
+      if (order) {
+        try {
+          await settle(order.id, obj.amount_cents, transactionId, paymobOrderId);
+        } catch (error) {
+          console.error('Paymob transaction verification failed:', error.message);
+          return res.status(503).json({ received: false, message: 'Payment verification is temporarily unavailable.' });
+        }
+      }
     }
   }
   res.json({ received: true });
 }
 
 async function settle(orderId, paidAmount, transactionId, paymobOrderId) {
+  if (!transactionId || !paymobOrderId) return;
+  // Never trust callback/reference-inquiry fields alone for a financial state change. Ask
+  // Paymob directly for this transaction and bind it to the saved intention ID and amount.
+  const transaction = await inquireTransactionById(transactionId);
+  if (!transaction || String(transaction.id) !== String(transactionId)
+    || transaction.success !== true || transaction.pending === true
+    || transaction.is_voided === true || transaction.is_refunded === true
+    || String(transaction.order?.id ?? '') !== String(paymobOrderId)
+    || !Number.isSafeInteger(Number(transaction.amount_cents))
+    || Number(transaction.amount_cents) !== Number(paidAmount)) return;
+
   const order = await Order.findById(orderId);
   if (!order) return;
+  const savedPaymobOrderIds = [ ...(order.paymobOrderIds || []), order.paymobOrderId ].filter(Boolean).map(String);
+  if (!savedPaymobOrderIds.includes(String(transaction.order.id))) return;
+  paidAmount = Number(transaction.amount_cents);
   if (order.paymentMethod && order.paymentMethod !== 'paymob') {
     return reportPaymentIssue(order, `Paymob sent a successful transaction (${transactionId || 'unknown transaction'}) for an order marked ${order.paymentMethod}. Verify the payment and resolve the order manually.`);
+  }
+  if (paidAmount !== order.total) {
+    return reportPaymentIssue(order, `Paymob transaction ${transactionId || 'unknown'} reports ${paidAmount} piasters, but this order total is ${order.total} piasters. Verify it in Paymob before fulfillment.`);
   }
 
   // Cancellation wins over a late payment callback. Record the actual charge and send a full
@@ -310,24 +385,30 @@ async function settle(orderId, paidAmount, transactionId, paymobOrderId) {
     }
     const allowedRefundStatuses = ['not_required', 'manual_required'];
     if (order.refundStatus === 'failed' && order.paymobTransactionId !== String(transactionId)) allowedRefundStatuses.push('failed');
-    const cancelledPayment = await Order.findOneAndUpdate({
-      _id: orderId,
-      status: 'cancelled',
-      paymentMethod: 'paymob',
-      $or: [
-        { refundStatus: { $in: allowedRefundStatuses } },
-        { refundStatus: { $exists: false } },
-      ],
-    }, {
-      $set: {
-        paymentStatus: 'paid',
-        paidAt: new Date(),
-        paymobTransactionId: String(transactionId),
-        ...(paymobOrderId ? { paymobOrderId: String(paymobOrderId) } : {}),
-        refundStatus: 'not_required',
-        refundAmount: amount,
-      },
-    }, { new: true });
+    let cancelledPayment;
+    try {
+      cancelledPayment = await Order.findOneAndUpdate({
+        _id: orderId,
+        status: 'cancelled',
+        paymentMethod: 'paymob',
+        $or: [
+          { refundStatus: { $in: allowedRefundStatuses } },
+          { refundStatus: { $exists: false } },
+        ],
+      }, {
+        $set: {
+          paymentStatus: 'paid',
+          paidAt: new Date(),
+          paymobTransactionId: String(transactionId),
+          ...(paymobOrderId ? { paymobOrderId: String(paymobOrderId) } : {}),
+          refundStatus: 'not_required',
+          refundAmount: amount,
+        },
+      }, { new: true });
+    } catch (error) {
+      if (error?.code === 11000) return reportPaymentIssue(order, 'This Paymob transaction is already linked to another order. Verify it in Paymob before taking further action.');
+      throw error;
+    }
     if (!cancelledPayment) return;
     const refund = await requestPaymobRefund(cancelledPayment._id, transactionId, amount);
     if (refund?.refundStatus === 'failed') {
@@ -339,13 +420,16 @@ async function settle(orderId, paidAmount, transactionId, paymobOrderId) {
     return;
   }
 
-  if (paidAmount !== order.total) {
-    return reportPaymentIssue(order, `Paymob transaction ${transactionId || 'unknown'} reports ${paidAmount} piasters, but this order total is ${order.total} piasters. Verify it in Paymob before fulfillment.`);
-  }
   // Claim the order atomically so repeated callbacks can't process it twice. `prev` is the order as it was.
-  const prev = await Order.findOneAndUpdate(
-    { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired'] } },
-    { status: 'paid', paymentStatus: 'paid', paidAt: new Date(), paymobTransactionId: transactionId, paymobOrderId: paymobOrderId || order.paymobOrderId, promoUseHeld: false });
+  let prev;
+  try {
+    prev = await Order.findOneAndUpdate(
+      { _id: orderId, status: { $in: [...AWAITING_PAYMENT, 'expired'] } },
+      { status: 'paid', paymentStatus: 'paid', paidAt: new Date(), paymobTransactionId: transactionId, paymobOrderId: paymobOrderId || order.paymobOrderId, promoUseHeld: false });
+  } catch (error) {
+    if (error?.code === 11000) return reportPaymentIssue(order, 'This Paymob transaction is already linked to another order. Verify it in Paymob before taking further action.');
+    throw error;
+  }
   if (!prev) {
     const current = await Order.findById(orderId);
     if (current?.status === 'cancelled') return settle(orderId, paidAmount, transactionId, paymobOrderId);
@@ -380,7 +464,10 @@ export async function sweep() {
         { status: 'requested', createdAt: { $lt: ago(ttl) } },
         { status: 'pending', paymentMethod: 'paymob', createdAt: { $lt: ago(3600e3) } },
         { status: 'pending', paymentMethod: { $exists: false }, createdAt: { $lt: ago(3600e3) } },
-        { status: 'pending', paymentMethod: 'instapay', createdAt: { $lt: ago(instaPayTtl) } },
+        {
+          status: 'pending', paymentMethod: 'instapay', createdAt: { $lt: ago(instaPayTtl) },
+          instaPayReference: { $exists: false }, instaPayProofMethod: { $ne: 'whatsapp' },
+        },
         { status: 'pending', paymentMethod: 'cod', createdAt: { $lt: ago(codTtl) } },
         { status: 'approved', expiresAt: { $lt: ago(600e3) } },
       ] },
@@ -405,10 +492,19 @@ export async function sweep() {
         }
         const transaction = await reconcilePaymob(o);
         if (!transaction) {
-          await reportPaymentIssue(o, 'Paymob transaction inquiry could not verify this payment. The order is still open and stock remains held; check it in Paymob.');
+          // An explicit "not found" means no payment transaction was created for this
+          // checkout attempt. Network/API/configuration errors throw and stay open below.
+          await expire({ _id: o._id, status: o.status });
           continue;
         }
         if (transaction.pending === true) {
+          continue;
+        }
+        if (transaction.success === true && !transaction.is_voided && !transaction.is_refunded) {
+          const settled = await Order.exists({ _id: o._id, status: 'paid' });
+          if (!settled) {
+            await reportPaymentIssue(o, 'Paymob reports a successful payment, but Stringtopia could not confirm it against the saved checkout. The order remains open and stock is held; please review the transaction in Paymob.');
+          }
           continue;
         }
       } catch (error) {
@@ -509,6 +605,7 @@ router.get('/by-ref/:token', async (req, res) => {
     promoCode: o.promoCode || '', discountAmount: o.discountAmount || 0,
     paymentMethod: o.paymentMethod || 'paymob', paymentStatus: o.paymentStatus || 'unpaid',
     paymentReference: String(o.id).toUpperCase(), instaPayReference: o.instaPayReference || '',
+    instaPayProofMethod: o.instaPayProofMethod || '',
     items: o.items.map(({ name, qty, variantLabel, variant }) => ({ name, qty, variantLabel, variant })),
   });
 });
@@ -516,14 +613,31 @@ router.get('/by-ref/:token', async (req, res) => {
 router.post('/by-ref/:token/instapay-reference', async (req, res) => {
   const { reference } = z.object({ reference: z.string().trim().min(3).max(80) }).parse(req.body);
   const order = await Order.findOneAndUpdate(
-    { publicToken: req.params.token, status: 'pending', paymentMethod: 'instapay' },
-    { instaPayReference: reference }, { new: true });
+    { publicToken: req.params.token, status: { $in: ['pending', 'expired'] }, paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation' },
+    { instaPayReference: reference, instaPayProofMethod: 'reference', instaPayProofSubmittedAt: new Date() }, { new: true });
   if (!order) throw fail(409, 'This InstaPay order is no longer awaiting confirmation');
   mail.instapayReferenceSubmitted(order);
   res.json({ saved: true });
 });
+router.post('/by-ref/:token/instapay-proof', async (req, res) => {
+  const { method } = z.object({ method: z.literal('whatsapp') }).parse(req.body ?? {});
+  const order = await Order.findOneAndUpdate(
+    { publicToken: req.params.token, status: { $in: ['pending', 'expired'] }, paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation', instaPayProofMethod: { $ne: method } },
+    { instaPayProofMethod: method, instaPayProofSubmittedAt: new Date() }, { new: true });
+  if (!order) {
+    const existing = await Order.exists({
+      publicToken: req.params.token, status: { $in: ['pending', 'expired'] },
+      paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation', instaPayProofMethod: method,
+    });
+    if (!existing) throw fail(409, 'This InstaPay order is no longer awaiting confirmation');
+  } else {
+    mail.instapayProofSubmitted(order);
+  }
+  res.json({ saved: true });
+});
 router.get('/mine', protect, async (req, res) => {
-  res.json(await Order.find({ user: req.user.id }).sort('-createdAt'));
+  const orders = await Order.find({ user: req.user.id }).sort('-createdAt').lean();
+  res.json(orders.map(serializeCustomerOrder));
 });
 
 export default router;

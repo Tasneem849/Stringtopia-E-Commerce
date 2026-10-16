@@ -26,7 +26,56 @@ export async function requestPaymobRefund(orderId, transactionId, amountCents) {
     return needsSetup || Order.findById(orderId);
   }
 
-  const order = await Order.findOneAndUpdate({
+  // Verify that this transaction really paid this order before asking Paymob to refund it.
+  // In particular, never let an untrusted callback transaction ID become a refund target.
+  const order = await Order.findOne({
+    _id: orderId,
+    status: 'cancelled',
+    paymentMethod: 'paymob',
+    paymentStatus: 'paid',
+    paymobTransactionId: String(transactionId),
+  });
+  if (!order) return Order.findById(orderId);
+
+  let transaction;
+  try {
+    transaction = await inquireTransactionById(transactionId);
+  } catch {
+    transaction = null;
+  }
+  const savedPaymobOrderIds = [ ...(order.paymobOrderIds || []), order.paymobOrderId ].filter(Boolean).map(String);
+  const verifiedAmount = Number(transaction?.amount_cents);
+  const refundAmount = Number(amountCents);
+  const verified = transaction
+    && String(transaction.id) === String(transactionId)
+    && transaction.success === true
+    && transaction.pending !== true
+    && transaction.is_voided !== true
+    && transaction.is_refunded !== true
+    && savedPaymobOrderIds.includes(String(transaction.order?.id ?? ''))
+    && Number.isSafeInteger(verifiedAmount)
+    && Number.isSafeInteger(refundAmount)
+    && refundAmount > 0
+    && verifiedAmount >= refundAmount;
+  if (!verified) {
+    return await Order.findOneAndUpdate({
+      _id: orderId,
+      status: 'cancelled',
+      paymentMethod: 'paymob',
+      paymentStatus: 'paid',
+      paymobTransactionId: String(transactionId),
+      $or: [ { refundStatus: { $in: ['not_required', 'failed'] } }, { refundStatus: { $exists: false } } ],
+    }, {
+      $set: {
+        refundStatus: 'failed',
+      refundAmount,
+        refundRequestedAt: new Date(),
+        refundError: 'Paymob could not verify that this transaction belongs to this order. No refund was sent; verify the transaction in Paymob.',
+      },
+    }, { new: true }) || Order.findById(orderId);
+  }
+
+  const claimedOrder = await Order.findOneAndUpdate({
     _id: orderId,
     status: 'cancelled',
     paymentMethod: 'paymob',
@@ -45,7 +94,7 @@ export async function requestPaymobRefund(orderId, transactionId, amountCents) {
     $unset: { refundError: 1 },
   }, { new: true });
 
-  if (!order) return Order.findById(orderId);
+  if (!claimedOrder) return Order.findById(orderId);
 
   try {
     const result = await refundTransaction(transactionId, amountCents);
@@ -72,6 +121,7 @@ export async function requestPaymobRefund(orderId, transactionId, amountCents) {
 export async function recordPaymobRefund(order, obj) {
   if (!order || order.status !== 'cancelled' || order.refundStatus === 'refunded' || !process.env.PAYMOB_API_KEY) return null;
   const transaction = await inquireTransactionById(order.paymobTransactionId);
+  if (!transaction || String(transaction.id) !== String(order.paymobTransactionId)) return null;
   const refundedAmount = Number(transaction?.refunded_amount_cents);
   const requestedAmount = Number(order.refundAmount || order.total);
   if (!Number.isFinite(refundedAmount) || refundedAmount < requestedAmount) return null;

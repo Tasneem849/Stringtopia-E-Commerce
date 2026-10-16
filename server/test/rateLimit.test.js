@@ -8,12 +8,12 @@ test('blocks a visitor after too many requests but not other visitors', () => {
   const headers = {};
   const res = { set(name, value) { headers[name] = value; return this; }, status(code) { status = code; return this; }, json() {} };
   let allowed = 0;
-  for (let i = 0; i < 5; i++) limit({ ip: '1.2.3.4' }, res, () => allowed++);
+  for (let i = 0; i < 5; i++) limit({ ip: '1.2.3.4', headers: {} }, res, () => allowed++);
   assert.equal(allowed, 3);
   assert.equal(status, 429);
   assert.equal(headers['Retry-After'], '60');
   let other = 0;
-  limit({ ip: '5.6.7.8' }, res, () => other++);
+  limit({ ip: '5.6.7.8', headers: {} }, res, () => other++);
   assert.equal(other, 1);
 });
 

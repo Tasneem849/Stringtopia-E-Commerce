@@ -5,7 +5,7 @@ export const metadata = {
   description: 'How Stringtopia collects, uses, and protects customer information.',
 };
 
-const updated = '15 October 2026';
+const updated = '16 October 2026';
 const whatsapp = 'https://wa.me/201123611242';
 const email = 'mailto:tasneemmohamed2013@gmail.com';
 
@@ -26,7 +26,7 @@ export default function PrivacyPage() {
           <li><strong>Order details:</strong> customer and recipient names, phone numbers, email, delivery address or pickup choice, gift message, products and selected variants, order notes, totals, discount, payment method, and order status.</li>
           <li><strong>Payment status:</strong> an InstaPay transfer reference if you submit one, and payment-provider references and status needed to reconcile a Paymob transaction. Paymob handles card entry on its own checkout page; Stringtopia does not receive or store your full card number or security code.</li>
           <li><strong>Optional proof:</strong> if you choose to send an InstaPay screenshot, you send it to us through WhatsApp. That image is handled by WhatsApp/Meta as well as Stringtopia; it is not uploaded through this website.</li>
-          <li><strong>Browser data:</strong> this site saves your cart and sign-in session in browser local storage. For checkout-abuse prevention, the server creates a keyed hash of the checkout IP address rather than saving the raw address in the order record.</li>
+          <li><strong>Browser data:</strong> this site saves your cart in browser local storage. When you sign in, the server sets an HttpOnly, SameSite cookie named <code>st_session</code> to maintain your session; browser scripts cannot read this cookie. For checkout-abuse prevention, the server creates a keyed hash of the checkout IP address rather than saving the raw address in the order record.</li>
         </ul>
         <p>If you place an order by phone or WhatsApp, we may enter the details needed to manage that order into the store system.</p>
       </section>
@@ -51,7 +51,7 @@ export default function PrivacyPage() {
         <h2 className="text-xl font-semibold">Your choices and requests</h2>
         <p>Depending on applicable law and the circumstances, you can ask to access or correct your information, request deletion or restriction, object to certain uses, or withdraw consent where processing relies on consent. Contact us using either channel below. We may need to verify your identity before acting, and some order records may need to be kept.</p>
         <p>For official information about Egypt’s personal data protection framework, visit the <a href="https://portal.pdpc.gov.eg/" target="_blank" rel="noopener noreferrer" className="font-medium text-yarn underline underline-offset-2">Personal Data Protection Center</a>.</p>
-        <p>Keep your device secure and sign out on shared devices. You can clear the saved cart and session by clearing this site’s browser storage; signing out is also available in the site navigation.</p>
+        <p>Keep your device secure and sign out on shared devices. Clearing browser local storage removes your saved cart but does not sign you out. Use Sign out in the site navigation or clear this site’s cookies to end your session.</p>
       </section>
 
       <section className="space-y-2">

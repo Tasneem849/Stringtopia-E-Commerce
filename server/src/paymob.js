@@ -3,6 +3,57 @@ import crypto from 'node:crypto';
 // Paymob Accept (Egypt): Intention API + Unified Checkout. Amounts are in piasters (1 EGP = 100).
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
+// Apply an order-level promo discount proportionally to product line totals. Paymob
+// requires item amounts to add up to the intention amount, and shipping is not discounted.
+function paymentItems(order) {
+  const productAmounts = order.items.map((item) => Number(item.price) * Number(item.qty));
+  const subtotal = productAmounts.reduce((sum, amount) => sum + amount, 0);
+  const discount = Number(order.discountAmount || 0);
+  const shippingFee = Number(order.shippingFee || 0);
+  const total = Number(order.total);
+  if (!Number.isSafeInteger(subtotal) || productAmounts.some((amount) => !Number.isSafeInteger(amount) || amount < 0)
+    || !Number.isSafeInteger(discount) || discount < 0 || discount > subtotal
+    || !Number.isSafeInteger(shippingFee) || shippingFee < 0
+    || !Number.isSafeInteger(total) || subtotal - discount + shippingFee !== total) {
+    throw fail(500, 'We couldn’t verify the order total for online payment. Please refresh your cart and try again.');
+  }
+
+  const discountShares = productAmounts.map(() => 0);
+  if (discount > 0) {
+    const denominator = BigInt(subtotal);
+    const portions = productAmounts.map((amount, index) => {
+      const numerator = BigInt(discount) * BigInt(amount);
+      return { index, share: Number(numerator / denominator), remainder: numerator % denominator };
+    });
+    const assigned = portions.reduce((sum, portion) => sum + portion.share, 0);
+    let remaining = discount - assigned;
+    portions.sort((a, b) => a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1);
+    for (const portion of portions) discountShares[portion.index] = portion.share;
+    for (const portion of portions) {
+      if (!remaining) break;
+      if (portion.remainder > 0n) {
+        discountShares[portion.index] += 1;
+        remaining -= 1;
+      }
+    }
+    if (remaining) throw fail(500, 'We couldn’t verify the order discount for online payment. Please refresh your cart and try again.');
+  }
+
+  const productItems = order.items.flatMap((item, index) => {
+    const amount = productAmounts[index] - discountShares[index];
+    if (!amount) return [];
+    const choice = item.variant ? ` · ${item.variantLabel || 'Option'}: ${item.variant}` : '';
+    return [{
+      name: `${item.qty} x ${item.name}${choice}`.slice(0, 50), amount,
+      description: `${item.name}${choice}`.slice(0, 100), quantity: 1,
+    }];
+  });
+  return [
+    ...productItems,
+    ...(shippingFee ? [{ name: 'Delivery', amount: shippingFee, description: 'Delivery', quantity: 1 }] : []),
+  ];
+}
+
 // The fields Paymob signs in a transaction callback, in the order it concatenates them
 const HMAC_FIELDS = ['amount_cents', 'created_at', 'currency', 'error_occured', 'has_parent_transaction', 'id', 'integration_id',
   'is_3d_secure', 'is_auth', 'is_capture', 'is_refunded', 'is_standalone_payment', 'is_voided', 'order.id', 'owner', 'pending',
@@ -42,7 +93,8 @@ async function getInquiryToken(apiKey) {
 // separate from the intention secret key (`PAYMOB_SECRET_KEY`).
 export async function inquireTransactionByReference(reference) {
   const apiKey = process.env.PAYMOB_API_KEY;
-  if (!apiKey || !reference) return null;
+  if (!apiKey) throw new Error('PAYMOB_API_KEY is not configured for Paymob transaction inquiry');
+  if (!reference) throw new Error('A Paymob merchant reference is required for transaction inquiry');
   const authToken = await getInquiryToken(apiKey);
   const response = await fetch('https://accept.paymob.com/api/ecommerce/orders/transaction_inquiry', {
     method: 'POST',
@@ -123,17 +175,8 @@ export async function createCheckout(order, attempt) {
       amount: order.total,
       currency: (process.env.CURRENCY || 'EGP').toUpperCase(),
       payment_methods: methods, // cards, mobile wallets... whatever integrations you listed
-      // one line per product with quantity 1, so the lines always add up exactly to the amount
-      items: [
-        ...order.items.map((i) => {
-          const choice = i.variant ? ` · ${i.variantLabel || 'Option'}: ${i.variant}` : '';
-          return {
-            name: `${i.qty} x ${i.name}${choice}`.slice(0, 50), amount: i.price * i.qty,
-            description: `${i.name}${choice}`.slice(0, 100), quantity: 1,
-          };
-        }),
-        ...(order.shippingFee ? [{ name: 'Delivery', amount: order.shippingFee, description: 'Delivery', quantity: 1 }] : []),
-      ],
+      // Promo savings are allocated across product lines; delivery remains full price.
+      items: paymentItems(order),
       billing_data: {
         first_name: first, last_name: rest.join(' ') || 'NA', email: order.email, phone_number: order.customer?.phone,
         country: 'EG', city: 'NA', state: 'NA', street: 'NA', building: 'NA', floor: 'NA', apartment: 'NA',

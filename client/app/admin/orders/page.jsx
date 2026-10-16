@@ -6,6 +6,7 @@ import AdminOrder from '@/components/AdminOrder';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 const STATUSES = ['all', 'pending', 'out_for_delivery', 'paid', 'shipped', 'approved', 'requested', 'declined', 'cancelled', 'expired'];
+const CANCELLABLE_STATUSES = new Set(['requested', 'pending', 'approved', 'paid', 'out_for_delivery', 'shipped']);
 
 export default function AdminOrders() {
   const { token } = useStore();
@@ -87,7 +88,7 @@ export default function AdminOrders() {
       {err && <p className="text-red-700">{err}</p>}
       {!orders ? <p>Loading...</p> : !orders.length ? <p>Nothing here.</p> : orders.map((order) => (
         <AdminOrder key={order._id} o={order}>
-          {order.status === 'pending' && order.paymentMethod === 'instapay' && order.paymentStatus === 'awaiting_confirmation' && (
+          {['pending', 'expired'].includes(order.status) && order.paymentMethod === 'instapay' && order.paymentStatus === 'awaiting_confirmation' && (
             <button onClick={() => orderAction(order._id, 'confirm-payment')} className="btn btn-primary">Confirm InstaPay payment</button>
           )}
           {order.status === 'pending' && order.paymentMethod === 'cod' && (
@@ -102,7 +103,7 @@ export default function AdminOrders() {
             <button onClick={() => orderAction(order._id, 'receive-cash')} className="btn btn-primary">Mark cash received</button>
           )}
           {order.status === 'out_for_delivery' && order.paymentMethod === 'cod' && <button onClick={() => orderAction(order._id, 'complete-cod')} className="btn btn-primary">Mark delivered & cash received</button>}
-          {order.status !== 'cancelled' && <button onClick={() => { setCancelTarget(order); setCancelReason(''); setCancelError(''); }} className="btn btn-ghost text-red-700">Cancel order</button>}
+          {CANCELLABLE_STATUSES.has(order.status) && <button onClick={() => { setCancelTarget(order); setCancelReason(''); setCancelError(''); }} className="btn btn-ghost text-red-700">Cancel order</button>}
           {order.status === 'cancelled' && order.refundStatus === 'failed' && <button onClick={() => { setCancelTarget(order); setCancelReason(''); setCancelError(''); }} className="btn btn-ghost text-red-700">Retry full refund</button>}
           {order.status === 'paid' && (
             <button onClick={() => orderAction(order._id, 'ship')} className="btn btn-primary">

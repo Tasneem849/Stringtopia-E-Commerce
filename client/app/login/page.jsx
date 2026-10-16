@@ -13,14 +13,14 @@ export default function Login() {
   const { login, cspNonce } = useStore();
   const router = useRouter();
   const [mode, setMode] = useState('login');
-  const [f, setF] = useState({ email: '', password: '', totpCode: '' });
+  const [f, setF] = useState({ email: '', password: '' });
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [needsAdminCode, setNeedsAdminCode] = useState(false);
   const set = (k) => (e) => {
     setF((current) => ({ ...current, [k]: e.target.value }));
     setErr(null);
-    if (k === 'email') setNeedsAdminCode(false);
+    setNotice('');
   };
 
   async function submitCredentials(submitMode = mode) {
@@ -56,15 +56,21 @@ export default function Login() {
 
     setBusy(true);
     setErr(null);
+    setNotice('');
     try {
-      login(await api(`/auth/${submitMode}`, {
+      const session = await api(`/auth/${submitMode}`, {
         method: 'POST',
-        body: { ...f, email, ...(needsAdminCode ? { totpCode: f.totpCode } : {}) },
+        body: { ...f, email },
         timeoutMs: 15000,
-      }));
+      });
+      if (submitMode === 'register') {
+        setMode('login');
+        setNotice(session.message || 'If an account can be used with these details, you can now try signing in.');
+        return;
+      }
+      login(session);
       router.replace(getPostLoginPath());
     } catch (error) {
-      if (error.code === 'ADMIN_MFA_REQUIRED' || error.code === 'ADMIN_MFA_INVALID') setNeedsAdminCode(true);
       setErr(describeAuthError(error, submitMode));
     } finally {
       setBusy(false);
@@ -79,12 +85,14 @@ export default function Login() {
   function changeMode(nextMode) {
     setMode(nextMode);
     setErr(null);
+    setNotice('');
   }
 
   const input = 'field w-full';
   return (
     <form onSubmit={submit} noValidate className="card mx-auto max-w-sm space-y-3">
       <h1 className="text-2xl font-bold">{mode === 'login' ? 'Log in' : 'Create account'}</h1>
+      {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</p>}
       <input type="email" placeholder="Email" autoComplete="email" value={f.email} onChange={set('email')} className={input} />
       <PasswordField
         placeholder={mode === 'register' ? 'Password (at least 8 characters)' : 'Password'}
@@ -93,14 +101,6 @@ export default function Login() {
         onChange={set('password')}
         className={input}
       />
-      {needsAdminCode && <label className="block space-y-1 text-sm font-medium">
-        <span>Administrator authenticator code</span>
-        <input
-          type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-          placeholder="6-digit code" value={f.totpCode} onChange={set('totpCode')}
-          className={input}
-        />
-      </label>}
       {err && <div id="auth-error" role="alert" className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
         <p className="font-bold">{err.title}</p>
         <p>{err.message}</p>
@@ -114,7 +114,8 @@ export default function Login() {
       <button className="btn btn-primary w-full" disabled={busy}>
         {busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Sign up'}
       </button>
-      <GoogleSignInButton nonce={cspNonce} />
+      <GoogleSignInButton nonce={cspNonce} accountEmail={f.email} accountPassword={f.password} />
+      <p className="text-center text-sm">Administrator? <Link href="/admin/login" className="cursor-pointer font-semibold underline underline-offset-2">Use admin sign-in</Link></p>
       <button type="button" className="cursor-pointer text-sm underline hover:text-blue-700" onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}>
         {mode === 'login' ? 'New here? Create an account' : 'Have an account? Log in'}
       </button>

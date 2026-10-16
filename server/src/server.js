@@ -15,6 +15,11 @@ if (process.env.NODE_ENV === 'production' && process.env.RATE_LIMIT_PROXY_SECRET
   throw new Error('RATE_LIMIT_PROXY_SECRET must contain at least 32 characters.');
 }
 
+const paymobCheckoutConfigured = Boolean(process.env.PAYMOB_SECRET_KEY || process.env.PAYMOB_PUBLIC_KEY || process.env.PAYMOB_INTEGRATION_IDS);
+if (paymobCheckoutConfigured && !process.env.PAYMOB_API_KEY) {
+  console.warn('Paymob checkout is configured without PAYMOB_API_KEY. Payment inquiries and automatic refunds will be unavailable.');
+}
+
 await mongoose.connect(process.env.MONGO_URI);
 
 if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_TOTP_SECRET) {

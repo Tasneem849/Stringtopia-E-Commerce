@@ -7,9 +7,10 @@ import { useStore } from '@/components/Providers';
 export default function AdminLayout({ children }) {
   const { user, ready } = useStore();
   const pathname = usePathname();
+  if (pathname === '/admin/login') return children;
   if (!ready) return <p>Loading...</p>;
   if (user?.role !== 'admin') {
-    const loginHref = `/login?next=${encodeURIComponent(pathname || '/admin')}`;
+    const loginHref = '/admin/login';
     return <p role="status">Admin access is required. <Link href={loginHref} className="underline">Log in with your admin account</Link> to continue.</p>;
   }
   return (

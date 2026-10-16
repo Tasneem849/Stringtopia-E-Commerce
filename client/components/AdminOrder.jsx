@@ -21,6 +21,7 @@ export default function AdminOrder({ o, children }) {
               `Automatic refund failed${o.refundError ? ` · ${o.refundError}` : ''}`}
       </p>}
       {o.instaPayReference && <p><strong>InstaPay transfer reference:</strong> {o.instaPayReference}</p>}
+      {o.instaPayProofMethod === 'whatsapp' && <p><strong>Payment proof:</strong> Customer opened WhatsApp to send a screenshot{o.instaPayProofSubmittedAt ? ` · ${new Date(o.instaPayProofSubmittedAt).toLocaleString()}` : ''}</p>}
       {o.items.map((i) => <div key={i._id}>
         <p>{i.qty} × {i.name}</p>
         {i.variant && <p className="ml-4 mt-1 inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-900">

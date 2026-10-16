@@ -9,13 +9,16 @@ import Expense from '../models/Expense.js';
 import AdminAuditLog from '../models/AdminAuditLog.js';
 import { mail } from '../email.js';
 import { requestPaymobRefund } from '../refunds.js';
-import { protect, adminOnly } from '../middleware/auth.js';
+import { adminOnly } from '../middleware/auth.js';
 import { categoryKey, syncCategoriesFromProducts } from '../categoryCatalog.js';
 import { listProducts, productSchema } from './products.js';
 import uploadRoutes from './uploads.js';
 
 const router = Router();
+// Keep this as the first middleware so every route added to this router—including uploads—is guarded.
+router.use(adminOnly, auditAdminMutation);
 const PAY_HOURS = 23;
+const CANCELLABLE_ORDER_STATUSES = ['requested', 'pending', 'approved', 'paid', 'out_for_delivery', 'shipped'];
 const categoryInputSchema = z.object({ name: z.string().trim().min(2).max(40) });
 const manualOrderSchema = z.object({
   source: z.enum(['whatsapp', 'phone']),
@@ -71,14 +74,49 @@ const cloudinaryAudioUrl = z.string().url().refine((value) => {
 
 function auditAdminMutation(req, res, next) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  let responseBody;
+  const sendJson = res.json.bind(res);
+  res.json = (body) => {
+    responseBody = body;
+    return sendJson(body);
+  };
   res.once('finish', () => {
-    const route = req.route?.path
-      ? `${req.baseUrl}${req.route.path}`
-      : req.path.replace(/[a-f\d]{24}/gi, ':id');
+    const routeTemplate = req.route?.path || req.path.replace(/[a-f\d]{24}/gi, ':id');
+    const route = `${req.baseUrl}${routeTemplate}`;
+    const operation = routeTemplate.split('/').filter(Boolean).at(-1) || 'change';
+    const actionLabels = {
+      approve: 'Approved reservation',
+      decline: 'Declined reservation',
+      ship: responseBody?.delivery?.method === 'pickup' ? 'Marked ready for pickup' : 'Shipped order',
+      'out-for-delivery': 'Marked order out for delivery',
+      'complete-cod': 'Completed cash-on-delivery order',
+      'confirm-payment': 'Confirmed InstaPay payment',
+      'receive-cash': 'Recorded cash payment',
+      cancel: 'Cancelled order',
+      orders: 'Created order',
+      stock: 'Adjusted product stock',
+      active: 'Changed promo-code status',
+      audio: 'Changed background audio',
+    };
+    const action = actionLabels[operation] || `${req.method} ${operation}`;
+    const resourceType = routeTemplate.split('/').filter(Boolean)[0] || 'admin';
+    const resourceId = String(responseBody?._id || responseBody?.id || req.params.id || '');
+    const itemSummary = Array.isArray(responseBody?.items)
+      ? responseBody.items.map((item) => `${item.qty}× ${item.name}${item.variant ? ` (${item.variant})` : ''}`).join(', ')
+      : '';
+    const summary = resourceType === 'orders'
+      ? `${action}${resourceId ? ` · order ${resourceId.toUpperCase()}` : ''}${responseBody?.status ? ` · ${responseBody.status}` : ''}${itemSummary ? ` · ${itemSummary}` : ''}`.slice(0, 500)
+      : `${action}${resourceId ? ` · ${resourceType} ${resourceId}` : ''}`.slice(0, 500);
     void AdminAuditLog.create({
       adminId: req.user.id,
+      adminName: req.user.name,
+      adminEmail: req.user.email,
       method: req.method,
       route,
+      action,
+      resourceType,
+      ...(resourceId ? { resourceId } : {}),
+      summary,
       status: res.statusCode,
       requestId: req.requestId || 'unknown',
     }).catch((error) => console.error('Could not write admin audit event:', error.message));
@@ -105,14 +143,11 @@ const promoCodeInputSchema = z.discriminatedUnion('discountType', [
   }),
 ]);
 
-// Every endpoint in this namespace requires a valid admin session.
-router.use(protect, adminOnly, auditAdminMutation);
-
 router.get('/audit-log', async (req, res) => {
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 25, 1), 50);
   const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
   const [events, total] = await Promise.all([
-    AdminAuditLog.find().populate('adminId', 'name').sort('-createdAt').skip((page - 1) * limit).limit(limit).lean(),
+    AdminAuditLog.find().populate('adminId', 'name email').sort('-createdAt').skip((page - 1) * limit).limit(limit).lean(),
     AdminAuditLog.countDocuments(),
   ]);
   res.json({ events, page, pages: Math.max(1, Math.ceil(total / limit)), total });
@@ -320,6 +355,9 @@ router.patch('/orders/:id/cancel', async (req, res) => {
       }
       return res.json(current);
     }
+    if (!CANCELLABLE_ORDER_STATUSES.includes(current.status)) {
+      return res.status(409).json({ message: 'This order can no longer be cancelled from its current status. Refresh and review the order.' });
+    }
 
     const paid = current.paymentStatus === 'paid';
     const needsManualPaymentReview = paid || (current.paymentMethod === 'instapay' && Boolean(current.instaPayReference));
@@ -327,7 +365,7 @@ router.patch('/orders/:id/cancel', async (req, res) => {
     const refundStatus = needsManualPaymentReview ? (canRefundAutomatically ? 'not_required' : 'manual_required') : 'not_required';
     previous = await Order.findOneAndUpdate({
       _id: current._id,
-      status: current.status,
+      status: { $in: CANCELLABLE_ORDER_STATUSES },
       paymentStatus: current.paymentStatus,
     }, {
       $set: {
@@ -366,11 +404,58 @@ router.patch('/orders/:id/cancel', async (req, res) => {
 });
 
 router.patch('/orders/:id/confirm-payment', async (req, res) => {
-  const order = await Order.findOneAndUpdate(
-    { _id: req.params.id, status: 'pending', paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation' },
-    { status: 'paid', paymentStatus: 'paid', paidAt: new Date(), promoUseHeld: false }, { new: true },
-  );
-  if (!order) return res.status(409).json({ message: 'This InstaPay order is no longer awaiting confirmation' });
+  const current = await Order.findOne({
+    _id: req.params.id, status: { $in: ['pending', 'expired'] },
+    paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation',
+  });
+  if (!current) return res.status(409).json({ message: 'This InstaPay order is no longer awaiting confirmation.' });
+
+  const held = [];
+  const releaseNewHolds = () => Promise.all(held.map((line) =>
+    Product.updateOne({ _id: line.product }, { $inc: { stock: line.qty } })));
+  let stockShortage = '';
+  let order;
+  try {
+    // Expiry already returned these items to inventory. Re-acquire every line before
+    // confirming so a late manual payment cannot oversell the remaining stock.
+    if (current.status === 'expired') {
+      for (const line of current.items) {
+        const result = await Product.updateOne(
+          { _id: line.product, stock: { $gte: line.qty } },
+          { $inc: { stock: -line.qty } },
+        );
+        if (!result.modifiedCount) {
+          stockShortage = line.name;
+          break;
+        }
+        held.push(line);
+      }
+    }
+    if (stockShortage) {
+      await releaseNewHolds();
+      return res.status(409).json({ message: `This expired order cannot be confirmed because ${stockShortage} no longer has enough stock. Contact the customer before taking further action.` });
+    }
+
+    order = await Order.findOneAndUpdate(
+      { _id: current._id, status: current.status, paymentMethod: 'instapay', paymentStatus: 'awaiting_confirmation' },
+      {
+        status: 'paid', paymentStatus: 'paid', paidAt: new Date(), promoUseHeld: false,
+        ...(current.status === 'expired' ? { stockHeld: true } : {}),
+      },
+      { new: true },
+    );
+  } catch (error) {
+    await releaseNewHolds();
+    throw error;
+  }
+  if (!order) {
+    await releaseNewHolds();
+    return res.status(409).json({ message: 'This InstaPay order changed while it was being confirmed. Refresh the orders list and try again.' });
+  }
+  if (current.status === 'expired' && current.promoCode && !current.promoUseHeld) {
+    await PromoCode.updateOne({ code: current.promoCode }, { $inc: { redemptionCount: 1 } });
+    await mail.problem(order, 'An InstaPay transfer was confirmed after the order expired and its promo reservation was released. Check whether the promo usage limit has been exceeded.');
+  }
   mail.paid(order);
   res.json(order);
 });

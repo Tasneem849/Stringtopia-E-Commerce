@@ -8,7 +8,7 @@ import { useStore } from './Providers';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-function describeGoogleError(error) {
+function describeGoogleError(error, adminMode) {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return {
       title: 'You appear to be offline',
@@ -67,6 +67,24 @@ function describeGoogleError(error) {
     };
   }
 
+  if (error?.code === 'ADMIN_LOGIN_REQUIRED') {
+    return {
+      title: 'Use administrator sign-in',
+      message: adminMode
+        ? 'This account did not receive administrator access. Verify the Google account linked to the shop administrator.'
+        : 'Administrator accounts sign in from /admin/login. Google sign-in on the customer page is for customer accounts.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'GOOGLE_LINK_REQUIRES_PASSWORD') {
+    return {
+      title: 'Enter your current password to link Google',
+      message: error.message || 'This email already has a password account. Enter its current password before linking Google; your password will stay active.',
+      retryable: false,
+    };
+  }
+
   if (error?.code === 'AUTH_SERVICE_UNAVAILABLE') {
     return { title: 'Could not reach Stringtopia’s sign-in service', message: error.message, retryable: true };
   }
@@ -95,34 +113,52 @@ function describeGoogleError(error) {
   };
 }
 
-export default function GoogleSignInButton({ nonce }) {
+export default function GoogleSignInButton({
+  nonce, adminMode = false, adminEmail = '', adminTotpCode = '', adminPassword = '', accountEmail = '', accountPassword = '',
+}) {
   const { login } = useStore();
   const router = useRouter();
   const buttonRef = useRef(null);
   const credentialRef = useRef('');
+  const adminEmailRef = useRef(adminEmail);
+  const adminTotpCodeRef = useRef(adminTotpCode);
+  const adminPasswordRef = useRef(adminPassword);
+  const accountEmailRef = useRef(accountEmail);
+  const accountPasswordRef = useRef(accountPassword);
+  adminEmailRef.current = adminEmail;
+  adminTotpCodeRef.current = adminTotpCode;
+  adminPasswordRef.current = adminPassword;
+  accountEmailRef.current = accountEmail;
+  accountPasswordRef.current = accountPassword;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [requiresAdminCode, setRequiresAdminCode] = useState(false);
-  const [totpCode, setTotpCode] = useState('');
 
-  const submitCredential = useCallback(async (credential, code = '') => {
+  const submitCredential = useCallback(async (credential) => {
     setBusy(true);
     setError(null);
     try {
-      login(await api('/auth/google', {
+      login(await api(adminMode ? '/auth/admin/google' : '/auth/google', {
         method: 'POST',
-        body: { credential, ...(code ? { totpCode: code } : {}) },
+        body: adminMode
+          ? {
+            credential, email: adminEmailRef.current.trim(), totpCode: adminTotpCodeRef.current,
+            password: adminPasswordRef.current,
+          }
+          : {
+            credential,
+            ...(accountEmailRef.current.trim() ? { email: accountEmailRef.current.trim() } : {}),
+            ...(accountPasswordRef.current ? { password: accountPasswordRef.current } : {}),
+          },
         timeoutMs: 15000,
       }));
       credentialRef.current = '';
-      router.replace(getPostLoginPath());
+      router.replace(adminMode ? '/admin' : getPostLoginPath());
     } catch (err) {
-      if (err.code === 'ADMIN_MFA_REQUIRED' || err.code === 'ADMIN_MFA_INVALID') setRequiresAdminCode(true);
-      setError(describeGoogleError(err));
+      setError(describeGoogleError(err, adminMode));
     } finally {
       setBusy(false);
     }
-  }, [login, router]);
+  }, [adminMode, login, router]);
 
   const handleCredential = useCallback((response) => {
     if (!response?.credential) {
@@ -157,15 +193,19 @@ export default function GoogleSignInButton({ nonce }) {
 
   if (!GOOGLE_CLIENT_ID) {
     return <p className="rounded-xl bg-sun/20 p-3 text-center text-sm text-stone-700">
-      Google sign-in needs to be configured. You can still use your email and password.
+      Google sign-in needs to be configured. You can still use {adminMode ? 'your admin' : 'your'} email and password.
     </p>;
+  }
+
+  if (adminMode && (!/^\d{6}$/.test(adminTotpCode) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail.trim()) || !adminPassword)) {
+    return <p className="rounded-xl bg-sun/20 p-3 text-center text-sm text-stone-700">Enter the admin email, password, and six-digit authenticator code above to continue with Google.</p>;
   }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-stone-500">
         <span className="h-px flex-1 bg-stone-300" />
-        or continue with
+        {adminMode ? 'or continue securely with Google' : 'or continue with'}
         <span className="h-px flex-1 bg-stone-300" />
       </div>
       <Script
@@ -197,22 +237,6 @@ export default function GoogleSignInButton({ nonce }) {
           )}
         </div>
       )}
-      {requiresAdminCode && <div className="space-y-2">
-        <label className="block space-y-1 text-sm font-medium">
-          <span>Administrator authenticator code</span>
-          <input
-            type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-            placeholder="6-digit code" value={totpCode}
-            onChange={(event) => { setTotpCode(event.target.value); setError(null); }}
-            className="field w-full"
-          />
-        </label>
-        <button
-          type="button" className="btn btn-primary w-full disabled:opacity-60"
-          disabled={busy || !credentialRef.current || totpCode.length !== 6}
-          onClick={() => submitCredential(credentialRef.current, totpCode)}
-        >Continue securely</button>
-      </div>}
     </div>
   );
 }

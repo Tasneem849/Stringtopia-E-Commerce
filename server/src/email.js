@@ -73,6 +73,10 @@ export const mail = {
     shell('Check an InstaPay transfer', `<p>Order ${String(o.id).toUpperCase()} submitted transfer reference <b>${esc(o.instaPayReference)}</b>.</p>${items(o)}${where(o)}`,
       { url: `${site()}/admin/orders`, label: 'Open orders' })),
 
+  instapayProofSubmitted: (o) => notify(seller(), `InstaPay screenshot proof expected (${money(o.total)})`,
+    shell('Check WhatsApp for payment proof', `<p>The customer opened WhatsApp to send an InstaPay payment screenshot for order ${String(o.id).toUpperCase()}. Check the chat and verify the transfer before confirming the order.</p>${items(o)}${where(o)}`,
+      { url: `${site()}/admin/orders`, label: 'Open orders' })),
+
   codCompleted: (o) => notify(o.email, 'Your Stringtopia order is complete',
     shell('Thank you! 🧶', `<p>Your cash-on-delivery order has been delivered and payment received.</p>${items(o)}${where(o)}`,
       { url: orderLink(o), label: 'View my order' })),

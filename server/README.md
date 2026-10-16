@@ -9,14 +9,16 @@ Express + MongoDB backend for a handmade-crochet store. Auth (JWT, customer/admi
 4. Payments locally: Paymob must reach your API, so expose it with a tunnel (e.g. `ngrok http 5000`) and set `API_URL` to that https address. Configure `PAYMOB_API_KEY` too so the expiry sweep and thank-you page can verify delayed callbacks.
 
 ## Endpoints
-- `POST /api/auth/register | login | google`, `GET /api/auth/me`
+- `POST /api/auth/register | login | google`, `POST /api/auth/admin/login`, `GET /api/auth/me`
 - `GET /api/favorites`, `POST /api/favorites/:productId`, `DELETE /api/favorites/:productId` (authenticated)
 - `GET /api/products` (`q, category, min, max, sort, page, limit`), `GET /api/products/:slug`
 - `GET /api/admin/products`, `POST/PUT/DELETE /api/admin/products` (admin only)
 - `POST /api/orders/checkout` (guests welcome; accepts `paymentMethod: paymob | instapay | cod`), `GET /api/orders/by-ref/:token`, `POST /api/orders/by-ref/:token/reconcile`, `POST /api/orders/pay/:token`, `POST /api/orders/by-ref/:token/instapay-reference`, `GET /api/orders/mine`
 - `GET /api/admin/orders?status=pending&page=1&limit=20`, `PATCH /api/admin/orders/:id/confirm-payment`, `PATCH /api/admin/orders/:id/complete-cod`, `PATCH /api/admin/orders/:id/out-for-delivery`, `PATCH /api/admin/orders/:id/cancel`, `PATCH /api/admin/orders/:id/ship` (admin only)
 
-All `/api/admin/*` endpoints require a Bearer token for an account whose server-side role is `admin`. Registration and Google sign-in create customer accounts only.
+All `/api/admin/*` endpoints pass through one router-entry guard. It validates the short-lived bearer token and reads the account’s current database role on every request, so demotion or deletion takes effect immediately. Admins sign in separately at `/admin/login` using email, password or a linked Google account, and the configured authenticator code; admin sign-in attempts are limited to five per 15 minutes per IP and email. Customer registration and the customer Google sign-in flow cannot create or authenticate admin sessions.
+
+The admin security log records each mutation with its actor, action, affected resource, and—on order actions—the order ID, status, and item summary. Entries are retained for one year.
 
 ## Roadmap
 Next hardening work: email verification/recovery, a checkout CAPTCHA after its provider and data flow are approved, a shared rate limiter for multiple API instances, and broader Mongo-backed checkout/auth tests. Sentry and production monitoring need project credentials before they can be enabled.

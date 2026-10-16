@@ -58,7 +58,7 @@ export async function POST(request) {
       const user = await readJson(response);
       if (!response.ok || !user?.id) return jsonResponse({ user: null }, 401, { 'Set-Cookie': clearedSessionCookie() });
       if (user.role === 'admin') {
-        return jsonResponse({ user: null, code: 'ADMIN_MFA_REQUIRED', message: 'Please sign in again and complete the administrator authenticator check.' }, 401, { 'Set-Cookie': clearedSessionCookie() });
+        return jsonResponse({ user: null, code: 'ADMIN_LOGIN_REQUIRED', message: 'Please sign in again from /admin/login.' }, 401, { 'Set-Cookie': clearedSessionCookie() });
       }
       const maxAge = 7 * 24 * 60 * 60;
       return jsonResponse({ user }, 200, { 'Set-Cookie': sessionCookie(token, maxAge) });
@@ -67,7 +67,10 @@ export async function POST(request) {
     }
   }
 
-  const endpoint = { login: '/auth/login', register: '/auth/register', google: '/auth/google' }[input?.action];
+  const endpoint = {
+    login: '/auth/login', register: '/auth/register', google: '/auth/google',
+    'admin-login': '/auth/admin/login', 'admin-google': '/auth/admin/google',
+  }[input?.action];
   if (!endpoint || !input.payload || typeof input.payload !== 'object') {
     return jsonResponse({ message: 'We couldn’t complete sign-in. Refresh the page and try again.' }, 400);
   }
@@ -80,8 +83,15 @@ export async function POST(request) {
     }, request);
     const data = await readJson(response);
     if (!response.ok) return jsonResponse(data, response.status, { ...(data.requestId ? { 'X-Request-Id': data.requestId } : {}) });
+    if (input.action === 'register') {
+      return jsonResponse({ message: data.message || 'If an account can be used with these details, you can now try signing in.' }, response.status);
+    }
     if (!data.token || !data.user?.id) {
       return jsonResponse({ code: 'INVALID_AUTH_RESPONSE', message: 'Stringtopia returned an incomplete sign-in response. Please try again.' }, 502);
+    }
+    const adminAuth = ['admin-login', 'admin-google'].includes(input.action);
+    if ((adminAuth && data.user.role !== 'admin') || (!adminAuth && data.user.role === 'admin')) {
+      return jsonResponse({ code: 'ADMIN_LOGIN_REQUIRED', message: 'Use the separate administrator sign-in at /admin/login.' }, 403);
     }
     const maxAge = data.user.role === 'admin' ? 30 * 60 : 7 * 24 * 60 * 60;
     return jsonResponse({ user: data.user }, response.status, { 'Set-Cookie': sessionCookie(data.token, maxAge) });

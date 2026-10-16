@@ -33,24 +33,6 @@ export function describeAuthError(error, mode) {
     };
   }
 
-  if ((error?.code === 'EMAIL_ALREADY_REGISTERED' || error?.status === 409) && mode === 'register') {
-    return {
-      title: 'This email already has an account',
-      message: 'Log in with this email, or use a different email address to create an account.',
-      action: 'login',
-      retryable: false,
-    };
-  }
-
-  if ((error?.code === 'ACCOUNT_NOT_FOUND' || error?.status === 404) && mode === 'login') {
-    return {
-      title: 'We couldn’t find an account for that email',
-      message: 'Check the spelling, or create a Stringtopia account with this email address.',
-      action: 'register',
-      retryable: false,
-    };
-  }
-
   if (error?.code === 'GOOGLE_SIGN_IN_REQUIRED') {
     return {
       title: 'This account was created with Google',
@@ -75,14 +57,30 @@ export function describeAuthError(error, mode) {
     };
   }
 
+  if (error?.code === 'ADMIN_LOGIN_REQUIRED') {
+    return {
+      title: 'Use administrator sign-in',
+      message: error.message || 'Administrator accounts sign in from /admin/login.',
+      retryable: false,
+    };
+  }
+
+  if (error?.code === 'ADMIN_CREDENTIALS_INVALID') {
+    return {
+      title: 'Those administrator details don’t match',
+      message: error.message || 'Check the admin email and password, then try again.',
+      retryable: false,
+    };
+  }
+
   if (error?.code === 'AUTH_SERVICE_UNAVAILABLE') {
     return { title: 'Could not reach Stringtopia’s sign-in service', message: error.message, retryable: true };
   }
 
-  if ((error?.code === 'INCORRECT_PASSWORD' || error?.status === 401) && mode === 'login') {
+  if ((error?.code === 'INVALID_CREDENTIALS' || error?.status === 401) && mode === 'login') {
     return {
-      title: 'That password doesn’t match',
-      message: 'Double-check your password and try again.',
+      title: 'Sign-in details don’t match',
+      message: 'Check your email and password, then try again. If you normally use Google, choose Continue with Google.',
       retryable: false,
     };
   }

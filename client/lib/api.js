@@ -24,13 +24,13 @@ function friendlyValidationMessage(path, errors) {
   const passwordIssues = Array.isArray(errors?.password) ? errors.password.join(' ') : '';
   const emailIssues = Array.isArray(errors?.email) ? errors.email.join(' ') : '';
 
-  if (/^\/auth\/register(?:\?|$)/.test(path) && /8|small|minimum/i.test(passwordIssues)) {
+  if (/^\/auth\/(?:register|admin\/login)(?:\?|$)/.test(path) && /8|small|minimum/i.test(passwordIssues)) {
     return 'Use a password with at least 8 characters.';
   }
-  if (/^\/auth\/(?:register|login)(?:\?|$)/.test(path) && /72|long|byte/i.test(passwordIssues)) {
+  if (/^\/auth\/(?:register|login|admin\/login)(?:\?|$)/.test(path) && /72|long|byte/i.test(passwordIssues)) {
     return 'That password is too long. Choose a shorter password, especially if it contains emoji or accented symbols.';
   }
-  if (/^\/auth\/(?:register|login)(?:\?|$)/.test(path) && emailIssues) {
+  if (/^\/auth\/(?:register|login|admin\/login)(?:\?|$)/.test(path) && emailIssues) {
     return 'Enter a valid email address and try again.';
   }
   return first;
@@ -122,7 +122,7 @@ export function friendlyErrorMessage(error, fallback = 'We couldn’t complete t
 
 export async function api(path, { token, method = 'GET', body, revalidate, timeoutMs } = {}) {
   const inBrowser = typeof window !== 'undefined';
-  const authAction = inBrowser ? /^\/auth\/(register|login|google)$/.exec(path)?.[1] : null;
+  const authAction = inBrowser ? /^\/auth\/(register|login|google|admin\/(?:login|google))$/.exec(path)?.[1]?.replace('/', '-') : null;
   const requestUrl = inBrowser ? (authAction ? '/api/session' : `/api/backend${path}`) : API + path;
   const init = {
     method,

@@ -89,7 +89,7 @@ export default function BackgroundAudioPlayer() {
         aria-label={label}
         aria-pressed={isMuted}
         title={label}
-        className="fixed bottom-4 left-4 z-50 inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-ink bg-sun px-4 py-2 text-sm font-bold text-ink shadow-lg transition hover:-translate-y-0.5 hover:bg-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        className="cursor-pointer fixed bottom-4 left-4 z-50 inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-ink bg-sun px-4 py-2 text-sm font-bold text-ink shadow-lg transition hover:-translate-y-0.5 hover:bg-rose focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M11 5 6 9H3v6h3l5 4V5Z" />
