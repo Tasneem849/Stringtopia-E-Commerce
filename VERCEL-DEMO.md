@@ -4,14 +4,25 @@ This setup deploys the storefront and Express API as **two separate Vercel Hobby
 
 This is separate from the existing Render API and the existing Vercel storefront deployment. Do not point the demo at the production MongoDB database or enter production payment, mail, OAuth, or admin secrets in these projects.
 
+## Current demo deployment
+
+As of 2026-10-16, the demo is deployed as:
+
+- Storefront: [stringtopia-demo-storefront.vercel.app](https://stringtopia-demo-storefront.vercel.app/)
+- API: [stringtopia-demo-api.vercel.app](https://stringtopia-demo-api.vercel.app/); its `/api/health` endpoint returns `{"ok":true}`.
+
+The isolated demo database currently contains no products, so the storefront displays an empty catalog until a catalog import succeeds. The source URL in `server/.env.demo.example` returned HTTP 404 during deployment setup; replace or repair that source and verify it returns a non-empty catalog before running the importer. The demo login and `/admin` routes redirect to the catalog by design.
+
 Vercel Hobby is restricted to personal, noncommercial use. Its Cron Jobs can run only once per day and have up to 59 minutes of timing variation, so this demo has no periodic order or account jobs. See [Vercel Hobby plan limits](https://vercel.com/docs/plans/hobby) and [Cron Job limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+
+Vercel deployments use dynamic outbound IP addresses by default. If Atlas network filtering requires a broad `0.0.0.0/0` entry for a Hobby demo, treat it as temporary, use a database user limited to `stringtopia_demo` (read-only for the running API), and remove the entry when the demo no longer needs it. See [Vercel's fixed-IP guidance](https://vercel.com/kb/guide/can-i-get-a-fixed-ip-address).
 
 ## 1. Create an isolated demo database
 
 1. Create a separate MongoDB database named exactly `stringtopia_demo` and a database user scoped to that database. Never reuse the production database URI.
 2. Create a temporary database user with read/write access for the catalog import. After importing, use a separate read-only database user for the API project.
 3. In the `server` directory, copy `.env.demo.example` to `.env.demo` and fill in the demo database URI and the public catalog endpoint. This local file is ignored by Git.
-4. Wait for the existing storefront project to deploy this GitHub update, then confirm its public `/api/backend/products` endpoint returns the catalog. The importer reads from that endpoint; it does not read the storefront's database directly.
+4. Set `SOURCE_CATALOG_URL` to an HTTPS endpoint that returns JSON with a `products` array and integer `pages` value. Confirm it returns at least one product before importing. The importer reads this public endpoint; it does not read another storefront's database directly.
 5. Seed only the public product catalog and category names:
 
    ```powershell
@@ -33,7 +44,7 @@ Vercel Hobby is restricted to personal, noncommercial use. Its Cron Jobs can run
    | `DEMO_READ_ONLY` | `true` |
    | `CLIENT_URL` | Exact origin of the storefront demo, with no trailing slash |
 
-3. Deploy and verify `https://YOUR-API-PROJECT.vercel.app/api/health` returns `{"ok":true}`.
+3. Deploy and verify `https://YOUR-API-PROJECT.vercel.app/api/health` returns `{"ok":true}`. The current demo API is [stringtopia-demo-api.vercel.app](https://stringtopia-demo-api.vercel.app/).
 
 Vercel detects the Express app at `server/src/app.js`. The long-running local/Render listener is `server/src/localServer.js`; `npm start` and `npm run dev` still use it. On Vercel, the API reuses a Mongo connection per warm function instance and blocks all write methods.
 
@@ -50,15 +61,15 @@ Vercel detects the Express app at `server/src/app.js`. The long-running local/Re
    | `NEXT_PUBLIC_SITE_URL` | Storefront demo origin |
    | `NEXT_PUBLIC_CURRENCY` | `EGP` |
 
-3. Deploy. The demo banner is visible, account/commerce pages redirect to the catalog, and product pages show that ordering is unavailable. Set the storefront origin in the API project's `CLIENT_URL` if its generated domain changes.
+3. Deploy. The current storefront is [stringtopia-demo-storefront.vercel.app](https://stringtopia-demo-storefront.vercel.app/). The demo banner is visible, account/commerce pages redirect to the catalog, and product pages show that ordering is unavailable. Set the storefront origin in the API project's `CLIENT_URL` if its generated domain changes.
 
 The `NEXT_PUBLIC_` demo setting is embedded during the build. Redeploy after changing it. The regular production storefront leaves this flag unset and continues using its existing Render API configuration.
 
 ## 4. Verify the demo
 
-- [ ] The storefront home page displays products and a read-only demo notice.
+- [ ] After a successful catalog import, the storefront home page displays products and a read-only demo notice. Until then, an empty product list is expected.
 - [ ] Product browsing, category filters, and search work.
-- [ ] `/cart`, `/checkout`, `/login`, `/account`, `/favorites`, `/orders`, and `/admin` return to the catalog.
+- [ ] `/cart`, `/checkout`, `/login`, `/account`, `/favorites`, `/orders`, `/admin`, and `/admin/login` return to the catalog.
 - [ ] A direct `POST` to the demo API returns `403` with code `DEMO_READ_ONLY`.
 - [ ] API and storefront use only the isolated demo database; no live payment or customer data is configured.
 
