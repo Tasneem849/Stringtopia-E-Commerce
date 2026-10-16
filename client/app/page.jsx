@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 
 import BrandArtwork from '@/components/BrandArtwork';
 import BackToTopButton from '@/components/BackToTopButton';
+import { DEMO_MODE } from '@/lib/demoMode';
 
 // Server-rendered so Google can index the catalog.
 export default async function Home({ searchParams }) {
@@ -46,7 +47,9 @@ export default async function Home({ searchParams }) {
         <div>
           <h1 className="text-5xl font-bold leading-none md:text-6xl">Crochet made by hand, one loop at a time.</h1>
           <p className="mt-3 max-w-md text-lg">
-            Buy what is in stock and we send it to you or to a friend. Found something sold out? Ask us to make it for you.
+            {DEMO_MODE
+              ? 'Explore handmade crochet favorites from Stringtopia’s read-only catalog preview.'
+              : 'Buy what is in stock and we send it to you or to a friend. Found something sold out? Ask us to make it for you.'}
           </p>
         </div>
         <BrandArtwork src="/stringtopia.jpg" alt="Stringtopia's teddy bear king, holding a crochet hook on a hill of yarn" className="hero-art w-full" />

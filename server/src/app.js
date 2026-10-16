@@ -36,9 +36,37 @@ function isAllowedClientOrigin(origin) {
   }
 }
 
-// The Express app on its own: it does not listen or connect to the database, so tests can use it directly
+// Express routes without starting a listener; Render/local and Vercel use separate entry points.
 export const app = express();
 app.set('trust proxy', 1); // behind Render's proxy, so req.ip is the real visitor
+let mongoConnectionPromise;
+const readOnlyDeployment = process.env.DEMO_READ_ONLY === 'true' || process.env.VERCEL === '1';
+
+async function connectForServerlessRequest() {
+  if (mongoose.connection.readyState === 1) return;
+  if (!process.env.MONGO_URI) throw new Error('MONGO_URI is not configured.');
+  if (process.env.VERCEL === '1') {
+    let databaseName = '';
+    try { databaseName = decodeURIComponent(new URL(process.env.MONGO_URI).pathname.split('/')[1] || ''); } catch {}
+    if (databaseName !== 'stringtopia_demo') {
+      throw new Error('The Vercel demo API requires a dedicated MongoDB database named stringtopia_demo.');
+    }
+  }
+  if (mongoose.connection.readyState === 2 && mongoConnectionPromise) {
+    await mongoConnectionPromise;
+    return;
+  }
+  if (mongoose.connection.readyState !== 2) mongoConnectionPromise = null;
+  if (!mongoConnectionPromise) {
+    mongoConnectionPromise = mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000, autoIndex: false })
+      .catch((error) => {
+        mongoConnectionPromise = null;
+        throw error;
+      });
+  }
+  await mongoConnectionPromise;
+}
+
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
@@ -50,6 +78,29 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.requestId);
   next();
 });
+// Vercel deployments stay read-only even if the demo flag is accidentally omitted.
+if (readOnlyDeployment) {
+  app.use((req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    return res.status(403).json({
+      code: 'DEMO_READ_ONLY',
+      message: 'This Stringtopia demo is read-only. Ordering and account features are disabled.',
+    });
+  });
+}
+
+// Vercel runs this app as a function. Reuse one Mongo connection per warm instance.
+if (process.env.VERCEL === '1') {
+  app.use(async (req, res, next) => {
+    try {
+      await connectForServerlessRequest();
+      next();
+    } catch (error) {
+      error.status = 503;
+      next(error);
+    }
+  });
+}
 app.use(express.json());
 // Paymob calls this after each payment attempt; the handler verifies the request's HMAC signature
 app.post('/api/orders/webhook', webhook);
@@ -124,3 +175,5 @@ app.use((err, req, res, next) => {
   const safeStatus = status >= 400 && status < 500 ? status : 500;
   return res.status(safeStatus).json({ message: err.message || 'We couldn’t complete that request. Please check the details and try again.' });
 });
+
+export default app;

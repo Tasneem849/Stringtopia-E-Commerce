@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { DEMO_MODE } from '@/lib/demoMode';
 
 const Ctx = createContext(null);
 export const useStore = () => useContext(Ctx);
@@ -24,6 +25,19 @@ export default function Providers({ children, cspNonce = '' }) {
 
   useEffect(() => {
     let active = true;
+    if (DEMO_MODE) {
+      try {
+        localStorage.removeItem('st_cart');
+        localStorage.removeItem('st_auth');
+      } catch {}
+      setCart([]);
+      setAuth(GUEST);
+      setFavorites([]);
+      setFavoritesLoading(false);
+      setReady(true);
+      api('/config').then(setConfig).catch(() => {});
+      return () => { active = false; };
+    }
     try { setCart(JSON.parse(localStorage.getItem('st_cart')) || []); } catch { setCart([]); }
     let legacySession = null;
     try { legacySession = JSON.parse(localStorage.getItem('st_auth') || 'null'); } catch {}
@@ -159,6 +173,7 @@ export default function Providers({ children, cspNonce = '' }) {
   };
 
   const addToCart = (p, qty, selectedVariant = '') => {
+    if (DEMO_MODE) return false;
     const stock = Number(p.stock);
     const limit = Number.isFinite(stock) ? Math.min(20, Math.max(0, stock)) : 20;
     const variants = Array.isArray(p.variants) ? p.variants : [];
@@ -219,6 +234,7 @@ export default function Providers({ children, cspNonce = '' }) {
   const removeItem = (key) => setCart((c) => c.filter((i) => cartLineKey(i) !== key));
   const isFavorite = (id) => favorites.some((item) => String(item._id) === String(id));
   const toggleFavorite = async (product) => {
+    if (DEMO_MODE) throw new Error('Favorites are disabled in this read-only demo.');
     if (!auth.token) throw new Error('Log in to save favorites.');
     const productId = String(product._id);
     if (isFavorite(productId)) {

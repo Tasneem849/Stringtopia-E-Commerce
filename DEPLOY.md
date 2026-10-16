@@ -13,6 +13,8 @@ The live storefront is [https://stringtopia-e-commerece-xcye.vercel.app](https:/
 
 The Blueprint currently requests Render's Free compute plan for the API. Free services have sleep, usage, and availability limits; provider eligibility and billing rules can change. A provider may request card verification even when the selected service displays `$0/month`. A card on file may also be billed for paid resources or eligible usage overages. Review the plan and Billing page before proceeding. Vercel's Hobby plan is limited to personal, non-commercial use; a shop used for sales needs a plan that permits commercial use. See the providers' current [Render free-plan details](https://render.com/docs/free), [Render billing FAQ](https://render.com/docs/faq), and [Vercel fair-use guidelines](https://vercel.com/docs/limits/fair-use-guidelines).
 
+For a separate noncommercial, read-only Vercel catalog preview, follow [VERCEL-DEMO.md](VERCEL-DEMO.md). Do not apply that demo setup to the live shop.
+
 ## 1. Prepare MongoDB Atlas
 
 1. Create a database/cluster for Stringtopia and a dedicated database user with a unique, strong password. Grant only the permissions needed for the Stringtopia database.

@@ -34,6 +34,7 @@ server/                 Express API, MongoDB models, and API tests
 .github/workflows/      Continuous integration
 ASSET-RIGHTS.md         Project and creative-asset use notice
 DEPLOY.md               Deployment and production configuration
+VERCEL-DEMO.md          Separate read-only Vercel Hobby catalog demo
 ```
 
 ## Run locally
@@ -87,6 +88,8 @@ GitHub Actions runs the API test suite against a disposable MongoDB service and 
 ## Deployment
 
 See [DEPLOY.md](DEPLOY.md) for the Vercel, Render, MongoDB Atlas, Google OAuth, Paymob, Cloudinary, and email setup. Provider plans and billing rules can change; review the current plan and usage terms before deploying a live shop.
+
+For a separate, read-only noncommercial catalog preview on Vercel Hobby, see [VERCEL-DEMO.md](VERCEL-DEMO.md). It uses a dedicated demo database and never enables checkout or customer accounts.
 
 ## Project and asset rights
 

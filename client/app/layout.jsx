@@ -6,6 +6,7 @@ import Providers from '@/components/Providers';
 import Header from '@/components/Header';
 import BackgroundAudioPlayer from '@/components/BackgroundAudioPlayer';
 import WorkshopReminder from '@/components/WorkshopReminder';
+import { DEMO_MODE } from '@/lib/demoMode';
 
 // Hand-drawn display face to echo the pen lettering in the logo, clean sans for reading
 const display = Gaegu({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-display' });
@@ -14,6 +15,7 @@ const body = Figtree({ subsets: ['latin'], variable: '--font-body' });
 export const metadata = {
   title: 'Stringtopia | Handmade Crochet',
   description: 'Handmade crochet pieces, made with love.',
+  ...(DEMO_MODE ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default async function RootLayout({ children }) {
@@ -23,6 +25,13 @@ export default async function RootLayout({ children }) {
       <body className="min-h-screen">
         <Providers cspNonce={cspNonce}>
           <Header />
+          {DEMO_MODE && (
+            <aside className="mx-auto mt-3 max-w-5xl px-4" role="note">
+              <p className="rounded-2xl border border-ink/15 bg-sun/35 px-4 py-3 text-center text-sm text-ink">
+                <strong>Stringtopia demo</strong> · Browse the handmade catalog. Accounts, orders, and checkout are disabled.
+              </p>
+            </aside>
+          )}
           <WorkshopReminder />
           <BackgroundAudioPlayer />
           <main className="mx-auto max-w-5xl p-4 md:p-6">{children}</main>

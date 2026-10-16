@@ -23,6 +23,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !.env.local.example
+!server/.env.demo.example
 
 # Operating-system files
 .DS_Store

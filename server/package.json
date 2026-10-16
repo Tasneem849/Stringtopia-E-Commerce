@@ -6,9 +6,10 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
+    "dev": "node --watch src/localServer.js",
+    "start": "node src/localServer.js",
     "seed": "node src/seed.js",
+    "seed:demo": "node src/seedDemoCatalog.js",
     "test": "node --test"
   },
   "dependencies": {

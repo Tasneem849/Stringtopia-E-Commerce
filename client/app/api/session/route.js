@@ -30,6 +30,9 @@ function upstreamUnavailable(error) {
 }
 
 export async function GET(request) {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    return jsonResponse({ user: null }, 200, { 'Set-Cookie': clearedSessionCookie() });
+  }
   const token = parseCookie(request, 'st_session');
   if (!token) return jsonResponse({ user: null });
   try {
@@ -46,6 +49,12 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    return jsonResponse({
+      code: 'DEMO_READ_ONLY',
+      message: 'Sign-in is disabled in this read-only Stringtopia demo.',
+    }, 403, { 'Set-Cookie': clearedSessionCookie() });
+  }
   if (!sameOriginRequest(request)) return jsonResponse({ code: 'INVALID_ORIGIN', message: 'Refresh the page and try signing in again.' }, 403);
   let input;
   try { input = await request.json(); } catch { return jsonResponse({ message: 'We couldn’t read the sign-in details. Please try again.' }, 400); }

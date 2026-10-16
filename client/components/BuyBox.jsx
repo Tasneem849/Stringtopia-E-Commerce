@@ -6,6 +6,7 @@ import { useStore } from './Providers';
 import DeliveryForm from './DeliveryForm';
 import ContactFields from './ContactFields';
 import PasswordField from './PasswordField';
+import { DEMO_MODE } from '@/lib/demoMode';
 
 // Enough stock -> "Add to cart" (guests welcome). Not enough -> reservation request, which needs an account:
 // guests create one right here (email + password) and the request is sent in the same step.
@@ -21,6 +22,14 @@ export default function BuyBox({ product: p }) {
   const [delivery, setDelivery] = useState(null);
   const [customer, setCustomer] = useState(null);
   const field = (k) => ({ value: creds[k], onChange: (e) => setCreds({ ...creds, [k]: e.target.value }) });
+
+  if (DEMO_MODE) {
+    return (
+      <div className="rounded-2xl border border-ink/15 bg-sun/25 p-4 text-sm text-stone-700">
+        You’re viewing the read-only Stringtopia demo. Ordering is unavailable here.
+      </div>
+    );
+  }
 
   function buyNow() {
     if (!addToCart(p, qty, variant)) {

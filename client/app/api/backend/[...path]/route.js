@@ -8,6 +8,12 @@ async function proxy(request, context) {
   if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     return jsonResponse({ message: 'This request method is not supported.' }, 405);
   }
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && !['GET', 'HEAD'].includes(method)) {
+    return jsonResponse({
+      code: 'DEMO_READ_ONLY',
+      message: 'This Stringtopia demo is read-only. Ordering and account features are disabled.',
+    }, 403);
+  }
   if (!['GET', 'HEAD'].includes(method) && !sameOriginRequest(request)) {
     return jsonResponse({ message: 'Refresh the page and try again.' }, 403);
   }

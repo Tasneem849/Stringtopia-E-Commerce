@@ -18,6 +18,15 @@ export function proxy(request) {
     "frame-ancestors 'none'",
   ].join('; ');
 
+  const pathname = request.nextUrl.pathname;
+  const demoOnlyRoutes = ['/account', '/admin', '/cart', '/checkout', '/favorites', '/login', '/orders', '/pay', '/thanks'];
+  const isDemoOnlyRoute = demoOnlyRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && isDemoOnlyRoute) {
+    const response = NextResponse.redirect(new URL('/', request.url));
+    response.headers.set('Content-Security-Policy', policy);
+    return response;
+  }
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('Content-Security-Policy', policy);
   requestHeaders.set('x-nonce', nonce);
