@@ -1,6 +1,6 @@
 # Stringtopia
 
-[![CI](https://github.com/Tasneem849/Stringtopia-E-Commerece/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tasneem849/Stringtopia-E-Commerece/actions/workflows/ci.yml)
+[![CI](https://github.com/Tasneem849/Stringtopia-E-Commerce/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tasneem849/Stringtopia-E-Commerce/actions/workflows/ci.yml)
 
 A full-stack storefront for handmade crochet, built for customers in Egypt. The shop supports EGP pricing, local delivery and pickup, and several payment methods.
 
