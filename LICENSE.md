@@ -1,4 +1,4 @@
-Required Notice: Copyright (c) 2026 Your Name (https://github.com/Tasneem849/Stringtopia-E-Commerce)
+Required Notice: Copyright (c) 2026 Tasneem Mohamed Kamal (https://github.com/Tasneem849/Stringtopia-E-Commerce)
 
 # PolyForm Noncommercial License 1.0.0
 
