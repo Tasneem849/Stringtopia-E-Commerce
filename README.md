@@ -107,6 +107,6 @@ For a separate, read-only noncommercial catalog preview on Vercel Hobby, see [VE
 ## License and asset rights
 
 The source code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-You may use, study, and modify it for noncommercial purposes. Commercial use requires separate written permission; contact: your-email@example.com.
+You may use, study, and modify it for noncommercial purposes. Commercial use requires separate written permission; contact: tasneemmohamed2013@gmail.com.
 
 Stringtopia's name, logo, illustrations, product descriptions, and original creative assets are not covered by this license; see [ASSET-RIGHTS.md](ASSET-RIGHTS.md). Third-party materials retain their own rights.
