@@ -8,10 +8,21 @@ A full-stack storefront for handmade crochet, built for customers in Egypt. The 
 
 **Production storefront:** [stringtopia-e-commerece-xcye.vercel.app](https://stringtopia-e-commerece-xcye.vercel.app/)
 
+## Screenshots
+
+| Home Page | Admin Login | Cart | Loading Animation |
+| --- | --- | --- | --- |
+| <img width="480" alt="Home Page" src="https://github.com/user-attachments/assets/9676bae7-2644-4c64-bccb-0ec6c0df07f5" /> | <img width="480" alt="Admin Login Form" src="https://github.com/user-attachments/assets/97e8f039-a14c-4d52-a19b-422572912e57" /> | <img width="480" alt="CART" src="https://github.com/user-attachments/assets/aa94c556-9f18-433c-a7a1-8959aaf92b03" /> | <img width="480" alt="LOADING" src="https://github.com/user-attachments/assets/a746fd35-a29c-4b3e-b977-6a2252adfcf2" />
+
+<details>
+<img width="480" alt="Screenshot (1302)" src="https://github.com/user-attachments/assets/e6108cd3-0fa5-49be-bca7-a5643ae4706a" />
+</details>
+
 ## Features
 
 - Product catalog with search, category and price filters, sorting, pagination, sale prices, selectable variants, and image galleries.
 - Guest checkout and customer accounts with Google or email/password sign-in, favorites, and self-service account deletion with a seven-day cancellation period.
+- Admin sign-in with authenticator-app two-factor, rate limiting, and an audit log.
 - Cash on delivery, InstaPay, and Paymob checkout, subject to the shop's active provider configuration.
 - Order reservations for made-to-order items, customer order tracking, and cancellation options.
 - Admin tools for products, categories, stock, promo codes, orders, manually entered phone or WhatsApp orders, expenses, and profit reporting.
@@ -95,19 +106,7 @@ For a separate, read-only noncommercial catalog preview on Vercel Hobby, see [VE
 
 ## License and asset rights
 
-The source code is available under the PolyForm Noncommercial License 1.0.0 see [LICENSE.md](LICENSE.md). You may use, study, and modify it for noncommercial purposes. Commercial use requires separate written permission. Stringtopia's name, logo, illustrations, product descriptions, and original creative assets are not covered by this license; see [ASSET-RIGHTS.md](ASSET-RIGHTS.md). Third-party materials retain their own rights.
+The source code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+You may use, study, and modify it for noncommercial purposes. Commercial use requires separate written permission; contact: your-email@example.com.
 
-## Screenshots
-### Home Page
-<img width="1920" height="1080" alt="Screenshot (1313)" src="https://github.com/user-attachments/assets/d95085d7-dc20-4897-9243-b85f542f0df9" />
-<img width="1920" height="1080" alt="Screenshot (1315)" src="https://github.com/user-attachments/assets/9676bae7-2644-4c64-bccb-0ec6c0df07f5" />
-
-### Login/Create account
-<img width="1920" height="1080" alt="Screenshot (1303)" src="https://github.com/user-attachments/assets/97e8f039-a14c-4d52-a19b-422572912e57" />
-<img width="1920" height="1080" alt="Screenshot (1302)" src="https://github.com/user-attachments/assets/e6108cd3-0fa5-49be-bca7-a5643ae4706a" />
-
-### Loading Animation
-<img width="1920" height="1080" alt="LOADING" src="https://github.com/user-attachments/assets/a746fd35-a29c-4b3e-b977-6a2252adfcf2" />
-
-### Cart Page
-<img width="1920" height="1080" alt="CART" src="https://github.com/user-attachments/assets/aa94c556-9f18-433c-a7a1-8959aaf92b03" />
+Stringtopia's name, logo, illustrations, product descriptions, and original creative assets are not covered by this license; see [ASSET-RIGHTS.md](ASSET-RIGHTS.md). Third-party materials retain their own rights.
