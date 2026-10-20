@@ -10,12 +10,15 @@ A full-stack storefront for handmade crochet, built for customers in Egypt. The 
 
 ## Screenshots
 
-| Home Page | Admin Login | Cart | Loading Animation |
-| --- | --- | --- | --- |
-| <img width="480" alt="Home Page" src="https://github.com/user-attachments/assets/9676bae7-2644-4c64-bccb-0ec6c0df07f5" /> | <img width="480" alt="Admin Login Form" src="https://github.com/user-attachments/assets/97e8f039-a14c-4d52-a19b-422572912e57" /> | <img width="480" alt="CART" src="https://github.com/user-attachments/assets/aa94c556-9f18-433c-a7a1-8959aaf92b03" /> | <img width="480" alt="LOADING" src="https://github.com/user-attachments/assets/a746fd35-a29c-4b3e-b977-6a2252adfcf2" />
+| Home Page | Admin Login | Cart |
+| --- | --- | --- |
+| <img width="480" alt="Home Page" src="https://github.com/user-attachments/assets/9676bae7-2644-4c64-bccb-0ec6c0df07f5" /> | <img width="480" alt="Admin Login Form" src="https://github.com/user-attachments/assets/97e8f039-a14c-4d52-a19b-422572912e57" /> | <img width="480" alt="CART" src="https://github.com/user-attachments/assets/aa94c556-9f18-433c-a7a1-8959aaf92b03" />
 
 <details>
-<img width="480" alt="Screenshot (1302)" src="https://github.com/user-attachments/assets/e6108cd3-0fa5-49be-bca7-a5643ae4706a" />
+  <summary>More screenshots</summary>
+  <img width="480" alt="Create Account" src="https://github.com/user-attachments/assets/e6108cd3-0fa5-49be-bca7-a5643ae4706a" />
+  <img width="480" alt="LOADING" src="https://github.com/user-attachments/assets/a746fd35-a29c-4b3e-b977-6a2252adfcf2" />
+  <img width="480" alt="Variant" src="https://github.com/user-attachments/assets/ee3dbfce-3b6f-4aec-838a-295b4b4eeb90" />
 </details>
 
 ## Features
