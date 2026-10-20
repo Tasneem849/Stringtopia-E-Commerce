@@ -93,9 +93,9 @@ See [DEPLOY.md](DEPLOY.md) for the Vercel, Render, MongoDB Atlas, Google OAuth, 
 
 For a separate, read-only noncommercial catalog preview on Vercel Hobby, see [VERCEL-DEMO.md](VERCEL-DEMO.md). It uses a dedicated demo database and never enables checkout or customer accounts.
 
-## Project and asset rights
+## License and asset rights
 
-This public repository does not grant a license to copy or redistribute its source code. You may reference its high-level project structure. Stringtopia's name, logo, illustrations, product descriptions, and original creative assets are protected; product-photo sharing is limited by the terms in [ASSET-RIGHTS.md](ASSET-RIGHTS.md). Third-party materials retain their own rights.
+The source code is available under the PolyForm Noncommercial License 1.0.0 see [LICENSE.md](LICENSE.md). You may use, study, and modify it for noncommercial purposes. Commercial use requires separate written permission. Stringtopia's name, logo, illustrations, product descriptions, and original creative assets are not covered by this license; see [ASSET-RIGHTS.md](ASSET-RIGHTS.md). Third-party materials retain their own rights.
 
 ## Screenshots
 ### Home Page
